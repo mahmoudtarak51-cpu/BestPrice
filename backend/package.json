@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:api": "tsx watch src/api/server.ts",
+    "dev:worker": "tsx watch src/jobs/worker.ts",
+    "db:migrate": "tsx src/db/migrations/0001_init.ts",
+    "db:seed:catalog": "tsx src/db/seeds/catalog.ts",
+    "db:seed:admins": "tsx src/db/seeds/admins.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --passWithNoTests --dir tests/integration",
+    "test:contract": "vitest run --passWithNoTests --dir tests/contract"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^10.0.1",
+    "@fastify/swagger": "^9.2.0",
+    "@fastify/swagger-ui": "^5.2.0",
+    "bullmq": "^5.16.0",
+    "drizzle-orm": "^0.36.4",
+    "fastify": "^5.1.0",
+    "ioredis": "^5.4.2",
+    "pino": "^9.5.0",
+    "postgres": "^3.4.5",
+    "prom-client": "^15.1.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

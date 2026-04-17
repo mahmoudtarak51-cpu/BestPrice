@@ -1,0 +1,17 @@
+node_modules
+.pnpm-store
+.git
+.github
+.agents
+.specify
+.vscode
+specs
+coverage
+dist
+build
+.next
+playwright-report
+test-results
+*.log
+.env
+.env.*

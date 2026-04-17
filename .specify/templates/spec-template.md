@@ -1,19 +1,21 @@
 # Feature Specification: [FEATURE NAME]
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
+**Feature Branch**: `[###-feature-name]`
+**Created**: [DATE]
+**Status**: Draft
 **Input**: User description: "$ARGUMENTS"
 
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
-  
-  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
-  Think of each story as a standalone slice of functionality that can be:
+  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by
+  importance. Each user story/journey must be INDEPENDENTLY TESTABLE - meaning
+  if you implement just ONE of them, you should still have a viable MVP
+  (Minimum Viable Product) that delivers value.
+
+  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most
+  critical. Think of each story as a standalone slice of functionality that can
+  be:
   - Developed independently
   - Tested independently
   - Deployed independently
@@ -26,7 +28,8 @@
 
 **Why this priority**: [Explain the value and why it has this priority level]
 
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
+**Independent Test**: [Describe how this can be tested independently - e.g.,
+"Can be fully tested by [specific action] and delivers [specific value]"]
 
 **Acceptance Scenarios**:
 
@@ -72,8 +75,14 @@
   Fill them out with the right edge cases.
 -->
 
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
+- What happens when a result has multiple possible product matches with low
+  confidence?
+- How does the system behave when price, shipping, or availability data is
+  stale, missing, or contradictory?
+- What happens when Arabic and English queries should resolve to the same
+  product or filter set?
+- How does the system present unavailable offers, broken source data, or
+  partially parsed listings?
 
 ## Requirements *(mandatory)*
 
@@ -85,15 +94,31 @@
 ### Functional Requirements
 
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
+- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]
 - **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
 - **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
 - **FR-005**: System MUST [behavior, e.g., "log all security events"]
 
 *Example of marking unclear requirements:*
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth
+  method not specified - email/password, SSO, OAuth?]
+- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention
+  period not specified]
+
+### Comparison Domain Requirements *(required when feature touches ingestion,
+catalog, search, ranking, or product pages)*
+
+- **CD-001**: Specification MUST describe whether the feature changes raw
+  products, canonical products, offers, price history, or none.
+- **CD-002**: Specification MUST define how exact matches, likely matches, and
+  similar products are handled, or confirm that matching is unaffected.
+- **CD-003**: Specification MUST define how source attribution, freshness,
+  availability, shipping, trust, and confidence signals are surfaced, or
+  confirm that the feature is not user-facing.
+- **CD-004**: Specification MUST call out Arabic and English behavior for
+  user-facing search and comparison flows, or explain why localization is
+  unaffected.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -114,12 +139,15 @@
 - **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
 - **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
 
+> Include accuracy, freshness, transparency, or localization outcomes when the
+> feature affects product comparison behavior.
+
 ## Assumptions
 
 <!--
   ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right assumptions based on reasonable defaults
-  chosen when the feature description did not specify certain details.
+  Fill them out with the right assumptions based on reasonable defaults chosen
+  when the feature description did not specify certain details.
 -->
 
 - [Assumption about target users, e.g., "Users have stable internet connectivity"]

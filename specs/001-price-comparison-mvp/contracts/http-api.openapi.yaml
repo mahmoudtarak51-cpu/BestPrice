@@ -1,0 +1,455 @@
+openapi: 3.1.0
+info:
+  title: BestPrice MVP API
+  version: 0.1.0
+  description: >
+    HTTP contract for the Egypt-first bilingual electronics price-comparison MVP.
+    Shopper-facing endpoints exclude stale offers older than 12 hours. Admin
+    endpoints are restricted to internal admins.
+servers:
+  - url: http://localhost:3001/api/v1
+tags:
+  - name: Shopper
+  - name: Admin
+paths:
+  /search:
+    get:
+      tags: [Shopper]
+      summary: Search grouped products
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: lang
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [auto, ar, en]
+            default: auto
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: brand
+          in: query
+          schema:
+            type: string
+        - name: store
+          in: query
+          schema:
+            type: string
+        - name: minPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: maxPrice
+          in: query
+          schema:
+            type: number
+            minimum: 0
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Grouped search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /products/{productId}:
+    get:
+      tags: [Shopper]
+      summary: Get product details and exact/similar groupings
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+        '404':
+          description: Product not found
+  /products/{productId}/offers:
+    get:
+      tags: [Shopper]
+      summary: Get shopper-visible offers for a product
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Offer list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [productId, offers]
+                properties:
+                  productId:
+                    type: string
+                    format: uuid
+                  offers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Offer'
+  /admin/overview:
+    get:
+      tags: [Admin]
+      summary: Get operations summary for internal admins
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Admin dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOverview'
+        '401':
+          description: Unauthorized
+  /admin/sources:
+    get:
+      tags: [Admin]
+      summary: List source freshness and crawl health
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Source health list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sources]
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SourceHealth'
+  /admin/crawl-jobs:
+    post:
+      tags: [Admin]
+      summary: Trigger one or more crawl jobs manually
+      security:
+        - adminSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrawlJobCreateRequest'
+      responses:
+        '202':
+          description: Crawl jobs accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrawlJobCreateResponse'
+        '401':
+          description: Unauthorized
+  /admin/unmatched-products:
+    get:
+      tags: [Admin]
+      summary: List unmatched or review-needed source listings
+      security:
+        - adminSession: []
+      responses:
+        '200':
+          description: Review queue
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnmatchedProduct'
+components:
+  securitySchemes:
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: bestprice_admin_session
+  schemas:
+    SearchResponse:
+      type: object
+      required: [query, detectedLanguage, page, pageSize, totalResults, groups]
+      properties:
+        query:
+          type: string
+        detectedLanguage:
+          type: string
+          enum: [ar, en, mixed, unknown]
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalResults:
+          type: integer
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResultGroup'
+    SearchResultGroup:
+      type: object
+      required:
+        - productId
+        - canonicalName
+        - category
+        - brand
+        - bestOverallOffer
+        - exactOfferCount
+        - lastUpdatedAt
+      properties:
+        productId:
+          type: string
+          format: uuid
+        canonicalName:
+          type: string
+        canonicalNameArabic:
+          type: string
+          nullable: true
+        category:
+          type: string
+        brand:
+          type: string
+        imageUrl:
+          type: string
+          nullable: true
+        badges:
+          type: array
+          items:
+            type: string
+            enum: [best_overall, cheapest]
+        bestOverallOffer:
+          $ref: '#/components/schemas/OfferSummary'
+        cheapestOffer:
+          allOf:
+            - $ref: '#/components/schemas/OfferSummary'
+          nullable: true
+        exactOfferCount:
+          type: integer
+        similarProductCount:
+          type: integer
+        lastUpdatedAt:
+          type: string
+          format: date-time
+    ProductDetail:
+      type: object
+      required:
+        - productId
+        - canonicalName
+        - category
+        - brand
+        - exactOffers
+        - similarProducts
+      properties:
+        productId:
+          type: string
+          format: uuid
+        canonicalName:
+          type: string
+        canonicalNameArabic:
+          type: string
+          nullable: true
+        category:
+          type: string
+        brand:
+          type: string
+        specs:
+          type: object
+          additionalProperties: true
+        exactOffers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Offer'
+        similarProducts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SimilarProduct'
+    OfferSummary:
+      type: object
+      required:
+        - offerId
+        - store
+        - priceEgp
+        - availability
+        - lastUpdatedAt
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        store:
+          type: string
+        priceEgp:
+          type: number
+        shippingEgp:
+          type: number
+          nullable: true
+        landedPriceEgp:
+          type: number
+          nullable: true
+        availability:
+          type: string
+          enum: [in_stock, limited, out_of_stock, unknown]
+        lastUpdatedAt:
+          type: string
+          format: date-time
+    Offer:
+      allOf:
+        - $ref: '#/components/schemas/OfferSummary'
+        - type: object
+          required:
+            - matchLevel
+            - matchConfidence
+            - buyUrl
+          properties:
+            matchLevel:
+              type: string
+              enum: [exact, likely, similar]
+            matchConfidence:
+              type: number
+              minimum: 0
+              maximum: 1
+            buyUrl:
+              type: string
+            rankingReasons:
+              type: array
+              items:
+                type: string
+    SimilarProduct:
+      type: object
+      required: [productId, canonicalName, matchConfidence]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        canonicalName:
+          type: string
+        matchConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    AdminOverview:
+      type: object
+      required:
+        - sourceCount
+        - staleSourceCount
+        - failedJobCount
+        - unmatchedProductCount
+        - generatedAt
+      properties:
+        sourceCount:
+          type: integer
+        staleSourceCount:
+          type: integer
+        failedJobCount:
+          type: integer
+        unmatchedProductCount:
+          type: integer
+        generatedAt:
+          type: string
+          format: date-time
+    SourceHealth:
+      type: object
+      required:
+        - sourceAdapterId
+        - store
+        - status
+        - lastSuccessfulCrawlAt
+        - staleOfferCount
+      properties:
+        sourceAdapterId:
+          type: string
+          format: uuid
+        store:
+          type: string
+        status:
+          type: string
+          enum: [healthy, warning, stale, failing]
+        lastSuccessfulCrawlAt:
+          type: string
+          format: date-time
+        staleOfferCount:
+          type: integer
+        latestJobStatus:
+          type: string
+          enum: [queued, running, succeeded, partial, failed, cancelled]
+    CrawlJobCreateRequest:
+      type: object
+      required: [adapterIds]
+      properties:
+        adapterIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        reason:
+          type: string
+          maxLength: 200
+    CrawlJobCreateResponse:
+      type: object
+      required: [jobIds, status]
+      properties:
+        jobIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        status:
+          type: string
+          enum: [accepted]
+    UnmatchedProduct:
+      type: object
+      required:
+        - rawProductId
+        - sourceAdapterId
+        - sourceTitle
+        - fetchedAt
+        - reviewStatus
+      properties:
+        rawProductId:
+          type: string
+          format: uuid
+        sourceAdapterId:
+          type: string
+          format: uuid
+        sourceTitle:
+          type: string
+        sourceUrl:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+        reviewStatus:
+          type: string
+          enum: [pending, accepted, rejected]
