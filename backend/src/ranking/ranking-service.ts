@@ -91,7 +91,8 @@ export function rankOffers(
     || left.landedPriceEgp - right.landedPriceEgp
   ));
   const orderedForCheapest = [...visibleOffers].sort((left, right) => (
-    left.landedPriceEgp - right.landedPriceEgp
+    left.priceEgp - right.priceEgp
+    || left.landedPriceEgp - right.landedPriceEgp
     || right.rankingScore - left.rankingScore
   ));
 

@@ -8,7 +8,7 @@ import { verifyAdminSession } from '../middleware/admin-auth.js';
  * GET /api/v1/admin/overview - Admin dashboard overview
  */
 
-const overviewResponseSchema = z.object({
+const _overviewResponseSchema = z.object({
   totalSources: z.number(),
   activeSources: z.number(),
   staleSources: z.number(),
@@ -31,7 +31,7 @@ export async function registerAdminOverviewRoutes(
    * GET /api/v1/admin/overview
    * Get admin dashboard overview with source health summary
    */
-  app.get<{ Reply: typeof overviewResponseSchema._type }>(
+  app.get<{ Reply: typeof _overviewResponseSchema._type | { error: string } }>(
     '/api/v1/admin/overview',
     {
       schema: {
@@ -79,7 +79,7 @@ export async function registerAdminOverviewRoutes(
         totalSources: overview.totalSources,
         activeSources: overview.activeSources,
         staleSources: overview.staleSources,
-        recentFailures: overview.recentFailures.map(f => ({
+        recentFailures: overview.recentFailures.map((f) => ({
           jobId: f.jobId,
           adapterId: f.adapterId,
           adapterName: f.adapterName,
@@ -150,7 +150,7 @@ export async function registerAdminSourcesRoutes(
       limit?: string;
       isStale?: string;
     };
-    Reply: typeof sourceListSchema._type;
+    Reply: typeof sourceListSchema._type | { error: string };
   }>(
     '/api/v1/admin/sources',
     {
@@ -212,7 +212,14 @@ export async function registerAdminSourcesRoutes(
 
       return reply.send(
         sourceListSchema.parse({
-          sources: result.sources.map(s => ({
+          sources: result.sources.map((s: {
+            adapterId: string;
+            name: string;
+            isStale: boolean;
+            lastCrawlAt: Date | string | null;
+            offerCount: number;
+            unmatchedCount: number;
+          }) => ({
             adapterId: s.adapterId,
             name: s.name,
             isStale: s.isStale,
@@ -236,7 +243,7 @@ export async function registerAdminSourcesRoutes(
     Params: {
       adapterId: string;
     };
-    Reply: typeof sourceHealthSchema._type;
+    Reply: typeof sourceHealthSchema._type | { error: string };
   }>(
     '/api/v1/admin/sources/:adapterId',
     {
@@ -322,15 +329,15 @@ export async function registerAdminSourcesRoutes(
           offerCount: health.offerCount,
           unmatchedCount: health.unmatchedCount,
           crawlIntervalMinutes: health.crawlIntervalMinutes,
-          recentCrawlJobs: health.recentCrawlJobs.map(j => ({
+          recentCrawlJobs: health.recentCrawlJobs.map((j) => ({
             jobId: j.jobId,
             status: j.status,
-            startedAt: j.startedAt.toISOString(),
+            startedAt: j.startedAt ? new Date(j.startedAt).toISOString() : new Date(0).toISOString(),
             completedAt: j.completedAt ? new Date(j.completedAt).toISOString() : null,
             itemsProcessed: j.itemsProcessed || 0,
           })),
-          recentFailures: health.recentFailures.map(f => ({
-            failedAt: f.failedAt.toISOString(),
+          recentFailures: health.recentFailures.map((f) => ({
+            failedAt: new Date(f.failedAt).toISOString(),
             reason: f.reason,
             retryCount: f.retryCount,
           })),

@@ -1,223 +1,243 @@
-import type { Database } from 'drizzle-orm';
-import { desc, eq, and, gte, sql, count, lte } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, sql } from 'drizzle-orm';
+import type { Database } from '../../db/client.js';
+
 import {
-  sourceAdaptersTable,
-  crawlJobsTable,
-  crawlFailuresTable,
-  offersTable,
-  rawProductsTable,
-} from '../db/schema.js';
+  crawlFailures,
+  crawlJobs,
+  offers,
+  rawProducts,
+  sourceAdapters,
+  stores,
+} from '../../db/schema.js';
+
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  return 0;
+}
 
 /**
- * Service for monitoring source adapter health and crawl status
+ * Service for monitoring source adapter health and crawl status.
  */
 export class SourceHealthService {
   constructor(private database: Database) {}
 
-  /**
-   * Get health status for a single source
-   */
   async getSourceHealth(adapterId: string) {
-    const adapter = await this.database
-      .select()
-      .from(sourceAdaptersTable)
-      .where(eq(sourceAdaptersTable.id, adapterId));
+    const adapterRows = await this.database
+      .select({
+        id: sourceAdapters.id,
+        key: sourceAdapters.key,
+        lastSuccessfulCrawlAt: sourceAdapters.lastSuccessfulCrawlAt,
+        crawlIntervalMinutes: sourceAdapters.crawlIntervalMinutes,
+        storeName: stores.displayName,
+      })
+      .from(sourceAdapters)
+      .innerJoin(stores, eq(stores.id, sourceAdapters.storeId))
+      .where(eq(sourceAdapters.id, adapterId))
+      .limit(1);
 
-    if (!adapter.length) {
+    if (!adapterRows.length) {
       return null;
     }
 
-    const source = adapter[0];
+    const adapter = adapterRows[0];
 
-    // Get recent crawl jobs
-    const crawlJobs = await this.database
-      .select()
-      .from(crawlJobsTable)
-      .where(eq(crawlJobsTable.adapter_id, adapterId))
-      .orderBy(desc(crawlJobsTable.started_at))
+    const recentJobs = await this.database
+      .select({
+        jobId: crawlJobs.id,
+        status: crawlJobs.status,
+        startedAt: crawlJobs.startedAt,
+        completedAt: crawlJobs.finishedAt,
+        fetchedCount: crawlJobs.fetchedCount,
+      })
+      .from(crawlJobs)
+      .where(eq(crawlJobs.sourceAdapterId, adapterId))
+      .orderBy(desc(crawlJobs.startedAt))
       .limit(10);
 
-    // Get recent failures
-    const failures = await this.database
+    const recentFailures = await this.database
       .select({
-        failedAt: crawlFailuresTable.failed_at,
-        reason: crawlFailuresTable.reason,
-        retryCount: crawlFailuresTable.retry_count,
+        failedAt: crawlFailures.lastSeenAt,
+        reason: crawlFailures.message,
+        severity: crawlFailures.severity,
       })
-      .from(crawlFailuresTable)
-      .innerJoin(
-        crawlJobsTable,
-        eq(crawlJobsTable.id, crawlFailuresTable.crawl_job_id),
-      )
-      .where(eq(crawlJobsTable.adapter_id, adapterId))
-      .orderBy(desc(crawlFailuresTable.failed_at))
+      .from(crawlFailures)
+      .where(eq(crawlFailures.sourceAdapterId, adapterId))
+      .orderBy(desc(crawlFailures.lastSeenAt))
       .limit(5);
 
-    // Count current offers
     const [{ offerCount }] = await this.database
       .select({ offerCount: count() })
-      .from(offersTable)
-      .where(eq(offersTable.source_adapter_id, adapterId));
+      .from(offers)
+      .innerJoin(rawProducts, eq(rawProducts.id, offers.rawProductId))
+      .where(eq(rawProducts.sourceAdapterId, adapterId));
 
-    // Check for stale data (>12 hours)
-    const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-    const isStale = source.last_successful_crawl_at === null ||
-      new Date(source.last_successful_crawl_at) < twelveHoursAgo;
+    const [{ unmatchedCount }] = await this.database
+      .select({ unmatchedCount: count() })
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(and(eq(rawProducts.sourceAdapterId, adapterId), isNull(offers.id)));
+
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const lastCrawlDate = adapter.lastSuccessfulCrawlAt
+      ? new Date(adapter.lastSuccessfulCrawlAt)
+      : null;
+    const isStale = !lastCrawlDate || lastCrawlDate < twelveHoursAgo;
 
     return {
-      adapterId: source.id,
-      name: source.name,
+      adapterId: adapter.id,
+      name: adapter.storeName || adapter.key,
       isStale,
-      lastCrawlAt: source.last_successful_crawl_at,
-      lastFailureAt: failures.length > 0 ? failures[0].failedAt : null,
-      offerCount,
-      unmatchedCount: 0, // Will be populated by UnmatchedProductService
-      crawlIntervalMinutes: source.crawl_interval_minutes,
-      recentCrawlJobs: crawlJobs.map(job => ({
-        jobId: job.id,
+      lastCrawlAt: adapter.lastSuccessfulCrawlAt,
+      lastFailureAt: recentFailures[0]?.failedAt ?? null,
+      offerCount: toNumber(offerCount),
+      unmatchedCount: toNumber(unmatchedCount),
+      crawlIntervalMinutes: adapter.crawlIntervalMinutes,
+      recentCrawlJobs: recentJobs.map((job) => ({
+        jobId: job.jobId,
         status: job.status,
-        startedAt: job.started_at,
-        completedAt: job.completed_at,
-        itemsProcessed: job.items_processed,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        itemsProcessed: toNumber(job.fetchedCount),
       })),
-      recentFailures: failures.map(f => ({
-        failedAt: f.failedAt,
-        reason: f.reason,
-        retryCount: f.retryCount,
+      recentFailures: recentFailures.map((failure) => ({
+        failedAt: failure.failedAt,
+        reason: failure.reason,
+        retryCount: failure.severity === 'warning' ? 1 : 0,
       })),
     };
   }
 
-  /**
-   * Get health overview for all sources
-   */
   async getOverview() {
     const sources = await this.database
-      .select()
-      .from(sourceAdaptersTable)
-      .orderBy(sourceAdaptersTable.created_at);
+      .select({
+        id: sourceAdapters.id,
+        lastSuccessfulCrawlAt: sourceAdapters.lastSuccessfulCrawlAt,
+      })
+      .from(sourceAdapters);
 
-    const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
 
     let activeSources = 0;
     let staleSources = 0;
 
     for (const source of sources) {
-      const isStale = source.last_successful_crawl_at === null ||
-        new Date(source.last_successful_crawl_at) < twelveHoursAgo;
-      
+      const isStale = !source.lastSuccessfulCrawlAt
+        || new Date(source.lastSuccessfulCrawlAt) < twelveHoursAgo;
       if (isStale) {
-        staleSources++;
+        staleSources += 1;
       } else {
-        activeSources++;
+        activeSources += 1;
       }
     }
 
-    // Get recent failures (within 15 minutes)
     const recentFailures = await this.database
       .select({
-        adapterId: crawlJobsTable.adapter_id,
-        adapterName: sourceAdaptersTable.name,
-        failedAt: crawlFailuresTable.failed_at,
-        reason: crawlFailuresTable.reason,
-        jobId: crawlJobsTable.id,
+        adapterId: sourceAdapters.id,
+        adapterName: stores.displayName,
+        failedAt: crawlFailures.lastSeenAt,
+        reason: crawlFailures.message,
+        jobId: crawlJobs.id,
       })
-      .from(crawlFailuresTable)
-      .innerJoin(
-        crawlJobsTable,
-        eq(crawlJobsTable.id, crawlFailuresTable.crawl_job_id),
-      )
-      .innerJoin(
-        sourceAdaptersTable,
-        eq(sourceAdaptersTable.id, crawlJobsTable.adapter_id),
-      )
-      .where(gte(crawlFailuresTable.failed_at, fifteenMinutesAgo))
-      .orderBy(desc(crawlFailuresTable.failed_at))
+      .from(crawlFailures)
+      .innerJoin(crawlJobs, eq(crawlJobs.id, crawlFailures.crawlJobId))
+      .innerJoin(sourceAdapters, eq(sourceAdapters.id, crawlFailures.sourceAdapterId))
+      .innerJoin(stores, eq(stores.id, sourceAdapters.storeId))
+      .where(gte(crawlFailures.lastSeenAt, fifteenMinutesAgo))
+      .orderBy(desc(crawlFailures.lastSeenAt))
       .limit(10);
 
-    // Count unmatched products
     const [{ unmatchedCount }] = await this.database
       .select({ unmatchedCount: count() })
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null));
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(isNull(offers.id));
 
     return {
       totalSources: sources.length,
       activeSources,
       staleSources,
-      recentFailures: recentFailures.map(f => ({
-        jobId: f.jobId,
-        adapterId: f.adapterId,
-        adapterName: f.adapterName,
-        failedAt: f.failedAt,
-        reason: f.reason,
+      recentFailures: recentFailures.map((failure) => ({
+        jobId: failure.jobId,
+        adapterId: failure.adapterId,
+        adapterName: failure.adapterName,
+        failedAt: failure.failedAt,
+        reason: failure.reason,
       })),
-      unmatchedCount,
+      unmatchedCount: toNumber(unmatchedCount),
       lastUpdatedAt: new Date(),
     };
   }
 
-  /**
-   * Get paginated list of all sources
-   */
-  async listSources(options: {
-    page?: number;
-    limit?: number;
-    isStale?: boolean;
-  } = {}) {
+  async listSources(options: { page?: number; limit?: number; isStale?: boolean } = {}) {
     const page = options.page || 1;
     const limit = options.limit || 10;
     const offset = (page - 1) * limit;
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
 
-    const now = new Date();
-    const twelveHoursAgo = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-
-    // Get all sources
-    const sources = await this.database
-      .select()
-      .from(sourceAdaptersTable)
-      .orderBy(sourceAdaptersTable.created_at)
+    const rows = await this.database
+      .select({
+        adapterId: sourceAdapters.id,
+        adapterKey: sourceAdapters.key,
+        storeName: stores.displayName,
+        lastCrawlAt: sourceAdapters.lastSuccessfulCrawlAt,
+      })
+      .from(sourceAdapters)
+      .innerJoin(stores, eq(stores.id, sourceAdapters.storeId))
+      .orderBy(sourceAdapters.createdAt)
       .limit(limit)
       .offset(offset);
 
-    // Get total count
     const [{ total }] = await this.database
       .select({ total: count() })
-      .from(sourceAdaptersTable);
+      .from(sourceAdapters);
 
-    // Hydrate with health data
-    const sourceList = await Promise.all(
-      sources.map(async source => {
-        const isStale = source.last_successful_crawl_at === null ||
-          new Date(source.last_successful_crawl_at) < twelveHoursAgo;
-        
-        // Skip if filtering by stale status
+    const hydrated = await Promise.all(
+      rows.map(async (row) => {
+        const isStale = !row.lastCrawlAt || new Date(row.lastCrawlAt) < twelveHoursAgo;
+
         if (options.isStale !== undefined && options.isStale !== isStale) {
           return null;
         }
 
         const [{ offerCount }] = await this.database
           .select({ offerCount: count() })
-          .from(offersTable)
-          .where(eq(offersTable.source_adapter_id, source.id));
+          .from(offers)
+          .innerJoin(rawProducts, eq(rawProducts.id, offers.rawProductId))
+          .where(eq(rawProducts.sourceAdapterId, row.adapterId));
+
+        const [{ unmatchedCount }] = await this.database
+          .select({ unmatchedCount: count() })
+          .from(rawProducts)
+          .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+          .where(and(eq(rawProducts.sourceAdapterId, row.adapterId), isNull(offers.id)));
 
         return {
-          adapterId: source.id,
-          name: source.name,
+          adapterId: row.adapterId,
+          name: row.storeName || row.adapterKey,
           isStale,
-          lastCrawlAt: source.last_successful_crawl_at,
-          offerCount,
-          unmatchedCount: 0,
+          lastCrawlAt: row.lastCrawlAt,
+          offerCount: toNumber(offerCount),
+          unmatchedCount: toNumber(unmatchedCount),
         };
       }),
     );
 
     return {
-      sources: sourceList.filter(s => s !== null),
-      total,
+      sources: hydrated.filter((source) => source !== null),
+      total: toNumber(total),
       page,
       limit,
     };
@@ -225,14 +245,11 @@ export class SourceHealthService {
 }
 
 /**
- * Service for managing unmatched products queue
+ * Service for managing unmatched products queue.
  */
 export class UnmatchedProductService {
   constructor(private database: Database) {}
 
-  /**
-   * Get unmatched products with pagination and filtering
-   */
   async getUnmatchedProducts(options: {
     page?: number;
     limit?: number;
@@ -243,163 +260,191 @@ export class UnmatchedProductService {
     const limit = options.limit || 50;
     const offset = (page - 1) * limit;
 
-    // Build query
-    let query = this.database
-      .select()
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null));
-
+    const predicates = [isNull(offers.id)];
     if (options.adapterId) {
-      query = query.where(eq(rawProductsTable.source_adapter_id, options.adapterId));
+      predicates.push(eq(rawProducts.sourceAdapterId, options.adapterId));
     }
-
     if (options.failureReason) {
-      query = query.where(eq(rawProductsTable.match_failure_reason, options.failureReason));
+      predicates.push(eq(rawProducts.ingestStatus, options.failureReason as never));
     }
 
-    // Apply pagination
-    const products = await query
-      .orderBy(desc(rawProductsTable.crawled_at))
+    const products = await this.database
+      .select({
+        rawProductId: rawProducts.id,
+        adapterId: rawProducts.sourceAdapterId,
+        title: rawProducts.titleRaw,
+        price: rawProducts.priceAmountEgp,
+        url: rawProducts.sourceUrl,
+        crawledAt: rawProducts.fetchedAt,
+        failureReason: rawProducts.ingestStatus,
+      })
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(and(...predicates))
+      .orderBy(desc(rawProducts.fetchedAt))
       .limit(limit)
       .offset(offset);
 
-    // Get total count
-    let countQuery = this.database
+    const [{ total }] = await this.database
       .select({ total: count() })
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null));
-
-    if (options.adapterId) {
-      countQuery = countQuery.where(eq(rawProductsTable.source_adapter_id, options.adapterId));
-    }
-
-    if (options.failureReason) {
-      countQuery = countQuery.where(eq(rawProductsTable.match_failure_reason, options.failureReason));
-    }
-
-    const [{ total }] = await countQuery;
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(and(...predicates));
 
     return {
-      products: products.map(p => ({
-        rawProductId: p.id,
-        adapterId: p.source_adapter_id,
-        title: p.title,
-        price: p.price,
-        url: p.source_url,
-        crawledAt: p.crawled_at,
-        failureReason: p.match_failure_reason,
+      products: products.map((product) => ({
+        rawProductId: product.rawProductId,
+        adapterId: product.adapterId,
+        title: product.title,
+        price: toNumber(product.price),
+        url: product.url,
+        crawledAt: product.crawledAt,
+        failureReason: product.failureReason,
       })),
-      total,
+      total: toNumber(total),
       page,
       limit,
     };
   }
 
-  /**
-   * Get single unmatched product details
-   */
   async getUnmatchedProduct(rawProductId: string) {
-    const product = await this.database
-      .select()
-      .from(rawProductsTable)
-      .where(and(
-        eq(rawProductsTable.id, rawProductId),
-        eq(rawProductsTable.canonical_product_id, null),
-      ));
+    const rows = await this.database
+      .select({
+        rawProductId: rawProducts.id,
+        adapterId: rawProducts.sourceAdapterId,
+        title: rawProducts.titleRaw,
+        price: rawProducts.priceAmountEgp,
+        url: rawProducts.sourceUrl,
+        crawledAt: rawProducts.fetchedAt,
+        failureReason: rawProducts.ingestStatus,
+        gtin: sql<string | null>`null`,
+        brand: rawProducts.brandRaw,
+        model: sql<string | null>`null`,
+        category: rawProducts.categoryRaw,
+        description: rawProducts.descriptionRaw,
+        rawData: rawProducts.payloadJson,
+      })
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(and(eq(rawProducts.id, rawProductId), isNull(offers.id)))
+      .limit(1);
 
-    if (!product.length) {
+    if (!rows.length) {
       return null;
     }
 
-    const p = product[0];
+    const product = rows[0];
     return {
-      rawProductId: p.id,
-      adapterId: p.source_adapter_id,
-      title: p.title,
-      price: p.price,
-      url: p.source_url,
-      crawledAt: p.crawled_at,
-      failureReason: p.match_failure_reason,
-      gtin: p.gtin,
-      brand: p.brand,
-      model: p.model,
-      category: p.category,
-      description: p.description,
-      rawData: p.raw_data,
+      rawProductId: product.rawProductId,
+      adapterId: product.adapterId,
+      title: product.title,
+      price: toNumber(product.price),
+      url: product.url,
+      crawledAt: product.crawledAt,
+      failureReason: product.failureReason,
+      gtin: product.gtin,
+      brand: product.brand,
+      model: product.model,
+      category: product.category,
+      description: product.description,
+      rawData: product.rawData,
     };
   }
 
-  /**
-   * Manually match an unmatched product to a canonical product
-   */
   async manualMatch(rawProductId: string, canonicalProductId: string) {
-    const result = await this.database
-      .update(rawProductsTable)
-      .set({
-        canonical_product_id: canonicalProductId,
-        match_failure_reason: null,
-        updated_at: new Date(),
+    const existing = await this.database
+      .select({
+        id: rawProducts.id,
+        sourceAdapterId: rawProducts.sourceAdapterId,
       })
-      .where(eq(rawProductsTable.id, rawProductId))
-      .returning();
+      .from(rawProducts)
+      .where(eq(rawProducts.id, rawProductId))
+      .limit(1);
+
+    if (!existing.length) {
+      return null;
+    }
+
+    const offerRow = await this.database
+      .insert(offers)
+      .values({
+        canonicalProductId,
+        rawProductId,
+        storeId: sql`(
+          select ${sourceAdapters.storeId}
+          from ${sourceAdapters}
+          where ${sourceAdapters.id} = ${existing[0].sourceAdapterId}
+          limit 1
+        )`,
+        matchLevel: 'exact',
+        matchConfidence: '1',
+        priceAmountEgp: sql`coalesce((select ${rawProducts.priceAmountEgp} from ${rawProducts} where ${rawProducts.id} = ${rawProductId}), 0)`,
+        shippingAmountEgp: sql`(select ${rawProducts.shippingAmountEgp} from ${rawProducts} where ${rawProducts.id} = ${rawProductId})`,
+        landedPriceEgp: sql`coalesce((select ${rawProducts.priceAmountEgp} from ${rawProducts} where ${rawProducts.id} = ${rawProductId}), 0)
+          + coalesce((select ${rawProducts.shippingAmountEgp} from ${rawProducts} where ${rawProducts.id} = ${rawProductId}), 0)`,
+        availabilityStatus: 'unknown',
+        lastSuccessfulUpdateAt: new Date(),
+        staleAfterAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
+        shopperVisible: true,
+        trustScoreSnapshot: '0',
+        buyUrl: sql`coalesce((select ${rawProducts.sourceUrl} from ${rawProducts} where ${rawProducts.id} = ${rawProductId}), '')`,
+      })
+      .returning({ id: offers.id });
+
+    await this.database
+      .update(rawProducts)
+      .set({ ingestStatus: 'matched' })
+      .where(eq(rawProducts.id, rawProductId));
+
+    return offerRow[0] || null;
+  }
+
+  async reject(rawProductId: string, _reason: string) {
+    const result = await this.database
+      .update(rawProducts)
+      .set({ ingestStatus: 'rejected' })
+      .where(eq(rawProducts.id, rawProductId))
+      .returning({ id: rawProducts.id });
 
     return result[0] || null;
   }
 
-  /**
-   * Reject a product (mark as unable to match)
-   */
-  async reject(rawProductId: string, reason: string) {
-    const result = await this.database
-      .update(rawProductsTable)
-      .set({
-        match_failure_reason: reason,
-        updated_at: new Date(),
-      })
-      .where(eq(rawProductsTable.id, rawProductId))
-      .returning();
-
-    return result[0] || null;
-  }
-
-  /**
-   * Get unmatched product statistics
-   */
   async getStatistics() {
     const [{ total }] = await this.database
       .select({ total: count() })
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null));
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(isNull(offers.id));
 
-    // Get breakdown by adapter
     const byAdapter = await this.database
       .select({
-        adapterId: rawProductsTable.source_adapter_id,
+        adapterId: rawProducts.sourceAdapterId,
         count: count(),
       })
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null))
-      .groupBy(rawProductsTable.source_adapter_id);
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(isNull(offers.id))
+      .groupBy(rawProducts.sourceAdapterId);
 
-    // Get breakdown by failure reason
     const byReason = await this.database
       .select({
-        reason: rawProductsTable.match_failure_reason,
+        reason: rawProducts.ingestStatus,
         count: count(),
       })
-      .from(rawProductsTable)
-      .where(eq(rawProductsTable.canonical_product_id, null))
-      .groupBy(rawProductsTable.match_failure_reason);
+      .from(rawProducts)
+      .leftJoin(offers, eq(offers.rawProductId, rawProducts.id))
+      .where(isNull(offers.id))
+      .groupBy(rawProducts.ingestStatus);
 
     return {
-      total,
-      byAdapter: byAdapter.map(a => ({
-        adapterId: a.adapterId,
-        count: a.count,
+      total: toNumber(total),
+      byAdapter: byAdapter.map((row) => ({
+        adapterId: row.adapterId,
+        count: toNumber(row.count),
       })),
-      byReason: byReason.map(r => ({
-        reason: r.reason,
-        count: r.count,
+      byReason: byReason.map((row) => ({
+        reason: row.reason,
+        count: toNumber(row.count),
       })),
     };
   }

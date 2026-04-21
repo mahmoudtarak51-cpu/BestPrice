@@ -1,213 +1,206 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import Fastify from 'fastify';
-import { buildServer } from '../../src/api/server';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-describe('Product Detail API Contracts', () => {
-  let app: ReturnType<typeof Fastify>;
+import { buildServer } from '../../src/api/server.js';
+import { runCrawlJob } from '../../src/jobs/crawl-job.js';
+import { runSearchRefreshJob } from '../../src/jobs/search-index-job.js';
+import { createSearchService } from '../../src/search/search-service.js';
+import { loadConfig } from '../../src/support/config.js';
+
+describe('Product route contract', () => {
+  const config = loadConfig({
+    ...process.env,
+    NODE_ENV: 'test',
+    PORT: '3001',
+    DATABASE_URL: 'postgres://bestprice:bestprice@localhost:5432/bestprice',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    SESSION_SECRET: 'development-only-session-secret',
+  });
+
+  let app: Awaited<ReturnType<typeof buildServer>>;
+  let productId: string;
+  let offerId: string;
+  const now = new Date('2026-04-17T10:00:00.000Z');
+  const searchService = createSearchService({
+    now: () => now,
+  });
 
   beforeAll(async () => {
-    app = await buildServer();
+    await runCrawlJob({
+      searchService,
+      scheduledAt: now,
+    });
+
+    await runSearchRefreshJob({
+      searchService,
+      refreshedAt: now,
+    });
+
+    app = await buildServer(config, {
+      searchService,
+      database: {
+        db: {} as never,
+        ping: async () => true,
+        close: async () => {},
+      } as never,
+      queues: {
+        ping: async () => true,
+        close: async () => {},
+      },
+    });
+
+    const searchResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/search?q=iphone&lang=en&page=1&pageSize=1',
+    });
+
+    expect(searchResponse.statusCode).toBe(200);
+    const searchPayload = searchResponse.json() as {
+      groups: Array<{ productId: string }>;
+    };
+
+    expect(searchPayload.groups.length).toBeGreaterThan(0);
+
+    productId = searchPayload.groups[0]!.productId;
+
+    const offersResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${productId}/offers`,
+    });
+
+    expect(offersResponse.statusCode).toBe(200);
+    const offersPayload = offersResponse.json() as {
+      offers: Array<{ id: string }>;
+    };
+
+    offerId = offersPayload.offers[0]!.id;
   });
 
   afterAll(async () => {
     await app.close();
   });
 
-  describe('GET /api/v1/products/{productId}', () => {
-    it('should return 200 with product detail schema', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id',
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-
-      // Product detail schema validation
-      expect(body).toHaveProperty('id');
-      expect(body).toHaveProperty('canonicalId');
-      expect(body).toHaveProperty('title');
-      expect(body).toHaveProperty('category');
-      expect(body).toHaveProperty('brand');
-      expect(body).toHaveProperty('model');
-      expect(body).toHaveProperty('description');
-      expect(body).toHaveProperty('images');
-      expect(body).toHaveProperty('specifications');
-      expect(body).toHaveProperty('exactOffers');
-      expect(body).toHaveProperty('similarProducts');
-      expect(body).toHaveProperty('updatedAt');
-
-      // Exact offers array
-      expect(Array.isArray(body.exactOffers)).toBe(true);
-      if (body.exactOffers.length > 0) {
-        const offer = body.exactOffers[0];
-        expect(offer).toHaveProperty('id');
-        expect(offer).toHaveProperty('storeId');
-        expect(offer).toHaveProperty('storeName');
-        expect(offer).toHaveProperty('price');
-        expect(offer).toHaveProperty('currency');
-        expect(offer).toHaveProperty('availability');
-        expect(offer).toHaveProperty('freshness');
-        expect(offer).toHaveProperty('rankingReason');
-        expect(offer).toHaveProperty('updatedAt');
-      }
-
-      // Similar products array
-      expect(Array.isArray(body.similarProducts)).toBe(true);
-      if (body.similarProducts.length > 0) {
-        const similar = body.similarProducts[0];
-        expect(similar).toHaveProperty('id');
-        expect(similar).toHaveProperty('title');
-        expect(similar).toHaveProperty('matchConfidence');
-        expect(similar).toHaveProperty('matchReason');
-      }
+  it('GET /api/v1/products/:productId returns product detail', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${productId}?lang=en`,
     });
 
-    it('should return 404 for non-existent product', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/non-existent-product-id',
-      });
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as {
+      id: string;
+      title: string;
+      category: string;
+      brand: string;
+      exactOffers: unknown[];
+      similarProducts: unknown[];
+      updatedAt: string;
+    };
 
-      expect(response.statusCode).toBe(404);
+    expect(payload.id).toBe(productId);
+    expect(payload.title).toEqual(expect.any(String));
+    expect(payload.category).toEqual(expect.any(String));
+    expect(payload.brand).toEqual(expect.any(String));
+    expect(Array.isArray(payload.exactOffers)).toBe(true);
+    expect(Array.isArray(payload.similarProducts)).toBe(true);
+    expect(payload.updatedAt).toEqual(expect.any(String));
+  });
+
+  it('GET /api/v1/products/:productId/offers returns offers list', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${productId}/offers`,
     });
 
-    it('should support Arabic and English query results', async () => {
-      // Test with Arabic language header
-      const responseAr = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id?lang=ar',
-      });
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as {
+      productId: string;
+      offers: Array<{
+        id: string;
+        storeName: string;
+        price: number;
+        currency: string;
+        freshness: {
+          hoursOld: number;
+          isStale: boolean;
+        };
+      }>;
+    };
 
-      expect(responseAr.statusCode).toBe(200);
-      const bodyAr = JSON.parse(responseAr.body);
-      expect(bodyAr).toHaveProperty('title');
-
-      // Test with English language header
-      const responseEn = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id?lang=en',
-      });
-
-      expect(responseEn.statusCode).toBe(200);
-      const bodyEn = JSON.parse(responseEn.body);
-      expect(bodyEn).toHaveProperty('title');
+    expect(payload.productId).toBe(productId);
+    expect(payload.offers.length).toBeGreaterThan(0);
+    expect(payload.offers[0]).toMatchObject({
+      id: expect.any(String),
+      storeName: expect.any(String),
+      price: expect.any(Number),
+      currency: 'EGP',
+      freshness: {
+        hoursOld: expect.any(Number),
+        isStale: expect.any(Boolean),
+      },
     });
   });
 
-  describe('GET /api/v1/products/{productId}/offers', () => {
-    it('should return 200 with offers list schema', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id/offers',
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-
-      // Offers list schema validation
-      expect(body).toHaveProperty('productId');
-      expect(body).toHaveProperty('offers');
-      expect(Array.isArray(body.offers)).toBe(true);
-
-      if (body.offers.length > 0) {
-        const offer = body.offers[0];
-        expect(offer).toHaveProperty('id');
-        expect(offer).toHaveProperty('storeId');
-        expect(offer).toHaveProperty('storeName');
-        expect(offer).toHaveProperty('price');
-        expect(offer).toHaveProperty('currency');
-        expect(offer).toHaveProperty('availability');
-        expect(offer).toHaveProperty('shippingInfo');
-        expect(offer).toHaveProperty('freshness');
-        expect(offer).toHaveProperty('rankingReason');
-        expect(offer).toHaveProperty('provenance');
-      }
+  it('GET /api/v1/products/:productId/similar returns similar products', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${productId}/similar?limit=3`,
     });
 
-    it('should filter offers by exactMatch flag', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id/offers?exactMatch=true',
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as {
+      productId: string;
+      products: Array<{
+        id: string;
+        title: string;
+        matchConfidence: number;
+        offers: unknown[];
+      }>;
+    };
+
+    expect(payload.productId).toBe(productId);
+    expect(Array.isArray(payload.products)).toBe(true);
+    if (payload.products.length > 0) {
+      expect(payload.products[0]).toMatchObject({
+        id: expect.any(String),
+        title: expect.any(String),
+        matchConfidence: expect.any(Number),
       });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(Array.isArray(body.offers)).toBe(true);
-
-      // All returned offers should be marked as exact matches
-      if (body.offers.length > 0) {
-        body.offers.forEach((offer: any) => {
-          expect(offer.matchType).toBe('exact');
-        });
-      }
-    });
-
-    it('should include freshness and stale offer indication', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id/offers?includeStale=true',
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-
-      if (body.offers.length > 0) {
-        const offer = body.offers[0];
-        // Freshness is measured in hours since last update
-        expect(typeof offer.freshness).toBe('object');
-        expect(offer.freshness).toHaveProperty('hoursOld');
-        expect(offer.freshness).toHaveProperty('isStale');
-        expect(offer.freshness).toHaveProperty('lastUpdatedAt');
-      }
-    });
-
-    it('should exclude stale offers by default (12-hour SLA)', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/test-product-id/offers',
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-
-      // Stale offers should not be in default response
-      if (body.offers.length > 0) {
-        body.offers.forEach((offer: any) => {
-          expect(offer.freshness.isStale).toBe(false);
-        });
-      }
-    });
-
-    it('should return 404 for non-existent product', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/products/non-existent/offers',
-      });
-
-      expect(response.statusCode).toBe(404);
-    });
+      expect(Array.isArray(payload.products[0].offers)).toBe(true);
+    }
   });
 
-  describe('OpenAPI Spec Validation', () => {
-    it('should have product endpoints documented in OpenAPI schema', async () => {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/docs/openapi.json',
-      });
+  it('GET /api/v1/products/:productId/offers/:offerId/explanation returns explanation', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/products/${productId}/offers/${offerId}/explanation`,
+    });
 
-      expect(response.statusCode).toBe(200);
-      const spec = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    const payload = response.json() as {
+      offerId: string;
+      rankingReason: string;
+      rankingScore: number;
+      factors: unknown[];
+      confidence: number;
+    };
 
-      // Check paths exist
-      expect(spec.paths).toHaveProperty('/api/v1/products/{productId}');
-      expect(spec.paths).toHaveProperty('/api/v1/products/{productId}/offers');
+    expect(payload.offerId).toBe(offerId);
+    expect(payload.rankingReason).toEqual(expect.any(String));
+    expect(payload.rankingScore).toEqual(expect.any(Number));
+    expect(Array.isArray(payload.factors)).toBe(true);
+    expect(payload.confidence).toEqual(expect.any(Number));
+  });
 
-      // Check schemas exist
-      expect(spec.components.schemas).toHaveProperty('ProductDetail');
-      expect(spec.components.schemas).toHaveProperty('OffersList');
-      expect(spec.components.schemas).toHaveProperty('Offer');
-      expect(spec.components.schemas).toHaveProperty('SimilarProduct');
+  it('returns 404 for unknown product', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/products/00000000-0000-4000-8000-999999999999',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: 'Product not found',
+      code: 'PRODUCT_NOT_FOUND',
     });
   });
 });

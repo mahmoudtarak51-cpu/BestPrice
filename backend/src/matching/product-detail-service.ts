@@ -1,96 +1,19 @@
-import { Database } from '../db/client';
+import type {
+  OffersList,
+  ProductDetail,
+  RankingReason,
+  SimilarProductsList,
+} from '../lib/api-types.js';
+import type { Database } from '../db/client.js';
 import {
   CanonicalProductRepository,
-  ProductWithOffers,
-} from '../db/repositories/canonical-product-repository';
-import { OfferRepository } from '../db/repositories/offer-repository';
+  type ProductWithOffers,
+} from '../db/repositories/canonical-product-repository.js';
+import { OfferRepository } from '../db/repositories/offer-repository.js';
 
-export interface ProductDetailProjection {
-  id: string;
-  title: string;
-  category: string;
-  brand: string;
-  model?: string;
-  gtin?: string;
-  description?: string;
-  images?: string[];
-  specifications?: Record<string, string>;
-  exactOffers: Array<{
-    id: string;
-    storeId: string;
-    storeName: string;
-    price: number;
-    currency: string;
-    availability: string;
-    shippingInfo?: Record<string, any>;
-    freshness: {
-      hoursOld: number;
-      isStale: boolean;
-      lastUpdatedAt: Date;
-    };
-    rankingReason?: string;
-    provenance: {
-      lastFetchedAt: Date;
-      sourceUrl?: string;
-    };
-  }>;
-  similarProducts: Array<{
-    id: string;
-    title: string;
-    brand: string;
-    model?: string;
-    category: string;
-    matchConfidence: number;
-    matchReason: string;
-    hasOffers: boolean;
-  }>;
-  updatedAt: Date;
-}
-
-export interface SimilarProductsProjection {
-  productId: string;
-  products: Array<{
-    id: string;
-    title: string;
-    brand: string;
-    model?: string;
-    category: string;
-    matchConfidence: number;
-    matchReason: string;
-    offers: Array<{
-      id: string;
-      storeId: string;
-      storeName: string;
-      price: number;
-      currency: string;
-      availability: string;
-      rankingReason?: string;
-    }>;
-  }>;
-}
-
-export interface OffersComparisonProjection {
-  productId: string;
-  offers: Array<{
-    id: string;
-    storeId: string;
-    storeName: string;
-    price: number;
-    currency: string;
-    availability: string;
-    shippingInfo?: Record<string, any>;
-    freshness: {
-      hoursOld: number;
-      isStale: boolean;
-      lastUpdatedAt: Date;
-    };
-    rankingReason?: string;
-    provenance: {
-      lastFetchedAt: Date;
-      sourceUrl?: string;
-    };
-  }>;
-}
+export type ProductDetailProjection = ProductDetail;
+export type SimilarProductsProjection = SimilarProductsList;
+export type OffersComparisonProjection = OffersList;
 
 export class ProductDetailService {
   private productRepo: CanonicalProductRepository;
@@ -142,7 +65,7 @@ export class ProductDetailService {
       return null;
     }
 
-    const similarProducts = product.similarProducts
+    const similarProducts: SimilarProductsProjection['products'] = product.similarProducts
       .slice(0, options?.limit ?? 10)
       .map((similar) => ({
         id: similar.id,
@@ -152,6 +75,7 @@ export class ProductDetailService {
         category: similar.category,
         matchConfidence: similar.matchConfidence,
         matchReason: similar.matchReason,
+        hasOffers: similar.hasOffers,
         offers: [], // Will be populated below
       }));
 
@@ -213,7 +137,7 @@ export class ProductDetailService {
         availability: o.availability,
         shippingInfo: o.shippingInfo,
         freshness: o.freshness,
-        rankingReason: o.rankingReason,
+        rankingReason: o.rankingReason as RankingReason | undefined,
         provenance: o.provenance,
       })),
     };
@@ -244,7 +168,7 @@ export class ProductDetailService {
         availability: o.availability,
         shippingInfo: o.shippingInfo,
         freshness: o.freshness,
-        rankingReason: o.rankingReason,
+        rankingReason: o.rankingReason as RankingReason | undefined,
         provenance: o.provenance,
       })),
       similarProducts: product.similarProducts.map((p) => ({

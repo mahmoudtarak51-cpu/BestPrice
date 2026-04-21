@@ -1,5 +1,6 @@
 'use client';
 
+import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
 
 /**
@@ -93,6 +94,7 @@ export function UnmatchedQueue() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Adapter</label>
           <select
+            name="adapterId"
             value={filterAdapter}
             onChange={e => {
               setFilterAdapter(e.target.value);
@@ -108,6 +110,7 @@ export function UnmatchedQueue() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Reason</label>
           <select
+            name="failureReason"
             value={filterReason}
             onChange={e => {
               setFilterReason(e.target.value);
@@ -141,7 +144,11 @@ export function UnmatchedQueue() {
               </thead>
               <tbody>
                 {products.map(product => (
-                  <tr key={product.rawProductId} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr
+                    key={product.rawProductId}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                    data-adapter={product.adapterId}
+                  >
                     <td className="px-4 py-3 text-gray-900 max-w-xs truncate">
                       <a
                         href={product.url}
@@ -181,7 +188,9 @@ export function UnmatchedQueue() {
               >
                 Previous
               </button>
-              <span className="px-3 py-1">Page {page}</span>
+              <span className="px-3 py-1">
+                Page {page} of {Math.max(1, Math.ceil(total / 20))}
+              </span>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={page * 20 >= total}
@@ -224,7 +233,7 @@ export function ManualCrawlForm() {
     );
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (selectedAdapters.length === 0) {
@@ -252,7 +261,7 @@ export function ManualCrawlForm() {
         throw new Error('Failed to trigger crawl');
       }
 
-      setMessage({ type: 'success', text: 'Crawl job(s) enqueued successfully' });
+      setMessage({ type: 'success', text: 'Crawl job enqueued' });
       setSelectedAdapters([]);
 
       // Clear message after 3 seconds
@@ -279,6 +288,7 @@ export function ManualCrawlForm() {
             {adapters.map(adapter => (
               <label key={adapter.id} className="flex items-center gap-3">
                 <input
+                  value={adapter.id}
                   type="checkbox"
                   checked={selectedAdapters.includes(adapter.id)}
                   onChange={() => handleAdapterToggle(adapter.id)}

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function HomePage() {
   return (
     <main className="localeLanding">
@@ -9,8 +11,8 @@ export default function HomePage() {
         filters.
       </p>
       <div className="localeLinks">
-        <a href="/en/search?q=iphone">Open English search</a>
-        <a href="/ar/search?q=سامسونج">افتح البحث بالعربية</a>
+        <Link href="/en/search?q=iphone">Open English search</Link>
+        <Link href="/ar/search?q=%D8%B3%D8%A7%D9%85%D8%B3%D9%88%D9%86%D8%AC">افتح البحث بالعربية</Link>
       </div>
     </main>
   );

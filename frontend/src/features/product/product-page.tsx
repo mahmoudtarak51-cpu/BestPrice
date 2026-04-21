@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useParams } from 'next/navigation';
 import { productClient } from '@/lib/api/product-client';
 import type { ProductDetail, OffersList, SimilarProductsList } from '@/lib/types/product';
 import { ProductSummary } from './product-summary';
@@ -18,7 +17,7 @@ interface ProductPageContentProps {
 export function ProductPageContent({
   productId,
   lang,
-  searchParams = {},
+  searchParams: _searchParams = {},
 }: ProductPageContentProps) {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [offers, setOffers] = useState<OffersList | null>(null);

@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import * as schema from './schema.js';
 
 export type DatabaseClient = ReturnType<typeof createDatabaseClient>;
+export type Database = ReturnType<typeof createDatabaseClient>['db'];
 
 export function createDatabaseClient(databaseUrl: string) {
   const sql = postgres(databaseUrl, {

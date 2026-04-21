@@ -1,0 +1,87 @@
+databases:
+  - name: bestprice-postgres
+    databaseName: bestprice
+    user: bestprice
+    plan: basic-256mb
+
+services:
+  - type: redis
+    name: bestprice-redis
+    plan: starter
+    maxmemoryPolicy: noeviction
+
+  - type: web
+    name: bestprice-api
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && corepack pnpm install --frozen-lockfile
+    startCommand: corepack pnpm --filter backend serve:api
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bestprice-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: bestprice-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_SEED_EMAIL
+        value: admin@example.com
+      - key: ADMIN_SEED_PASSWORD
+        sync: false
+      - key: SOURCE_A_BASE_URL
+        value: https://retailer-a.example
+      - key: SOURCE_B_BASE_URL
+        value: https://retailer-b.example
+
+  - type: worker
+    name: bestprice-worker
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && corepack pnpm install --frozen-lockfile
+    startCommand: corepack pnpm --filter backend serve:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bestprice-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: bestprice-redis
+          property: connectionString
+      - key: SESSION_SECRET
+        sync: false
+      - key: ADMIN_SEED_EMAIL
+        value: admin@example.com
+      - key: ADMIN_SEED_PASSWORD
+        sync: false
+      - key: SOURCE_A_BASE_URL
+        value: https://retailer-a.example
+      - key: SOURCE_B_BASE_URL
+        value: https://retailer-b.example
+
+  - type: web
+    name: bestprice-frontend
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && corepack pnpm install --frozen-lockfile && corepack pnpm --filter frontend build
+    startCommand: corepack pnpm --filter frontend start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_BASE_URL
+        value: https://bestprice-api.onrender.com/api/v1
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://bestprice-frontend.onrender.com

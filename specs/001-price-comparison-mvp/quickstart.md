@@ -6,6 +6,25 @@
 - pnpm 10+
 - Docker Desktop or Docker Engine with Compose support
 
+## 0. Verify the local toolchain
+
+Use the package manager version pinned by the workspace before running any app
+scripts.
+
+```bash
+node --version
+corepack enable
+corepack use pnpm@10.0.0
+pnpm --version
+docker compose version
+```
+
+Expected baseline:
+
+- Node.js 22 LTS
+- `pnpm 10.x`
+- Docker Compose available on the command line
+
 ## 1. Start local infrastructure
 
 ```bash
@@ -43,6 +62,7 @@ Frontend minimum values:
 
 ```bash
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/api/v1
 API_BASE_URL=http://localhost:3001/api/v1
 ```
 
@@ -136,3 +156,34 @@ Required MVP checks:
 - Ranking badges distinguish best overall versus cheapest offers
 - Stale offers are hidden after 12 hours
 - Admin overview surfaces crawl failures within 15 minutes
+
+## Smoke Run Notes
+
+Smoke validation was attempted on April 17, 2026 against the current local
+machine before the polish phase was closed out.
+
+Observed local tool versions:
+
+- `node v24.14.0`
+- `npm 11.9.0`
+- `git 2.53.0.windows.2`
+
+Observed blockers:
+
+- `pnpm` was not installed on `PATH`, so `npm run typecheck` stopped at the
+  workspace script boundary with `pnpm` not recognized.
+- `docker` was not installed on `PATH`, so local PostgreSQL and Redis could not
+  be started from `docker compose`.
+- The machine was running Node 24 instead of the documented Node 22 LTS
+  baseline.
+
+Recommended fix before rerunning the full smoke flow:
+
+```bash
+corepack enable
+corepack use pnpm@10.0.0
+docker compose version
+pnpm install
+pnpm typecheck
+pnpm test
+```

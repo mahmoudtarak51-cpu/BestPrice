@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Database } from 'drizzle-orm';
 
 import { buildServer } from '../../src/api/server.js';
 import { loadConfig } from '../../src/support/config.js';
@@ -25,7 +24,6 @@ describe('Admin Operations Flow Integration', () => {
 
   let app: Awaited<ReturnType<typeof buildServer>>;
   let sessionToken: string;
-  let database: Database;
 
   beforeAll(async () => {
     app = await buildServer(config, {
@@ -79,7 +77,10 @@ describe('Admin Operations Flow Integration', () => {
       expect(payload).toHaveProperty('sources');
 
       // Check for stale marker in response
-      payload.sources.forEach((source: any) => {
+      payload.sources.forEach((source: {
+        isStale: boolean;
+        lastCrawlAt: string;
+      }) => {
         if (source.isStale) {
           expect(source.lastCrawlAt).toBeDefined();
           // Verify timestamp is parseable and represents a past time
@@ -134,7 +135,11 @@ describe('Admin Operations Flow Integration', () => {
         expect(payload).toHaveProperty('recentFailures');
         expect(Array.isArray(payload.recentFailures)).toBe(true);
 
-        payload.recentFailures.forEach((failure: any) => {
+        payload.recentFailures.forEach((failure: {
+          failedAt: string;
+          reason: string;
+          retryCount: number;
+        }) => {
           expect(failure).toHaveProperty('failedAt');
           expect(failure).toHaveProperty('reason');
           expect(failure).toHaveProperty('retryCount');
@@ -163,7 +168,7 @@ describe('Admin Operations Flow Integration', () => {
 
       // Verify all failures are recent (within observability window)
       const now = Date.now();
-      payload.recentFailures.forEach((failure: any) => {
+      payload.recentFailures.forEach((failure: { failedAt: string }) => {
         const failureTime = new Date(failure.failedAt).getTime();
         const ageMinutes = (now - failureTime) / (1000 * 60);
         expect(ageMinutes).toBeLessThanOrEqual(15);
@@ -191,7 +196,12 @@ describe('Admin Operations Flow Integration', () => {
       expect(payload).toHaveProperty('products');
       expect(payload).toHaveProperty('total');
 
-      payload.products.forEach((product: any) => {
+      payload.products.forEach((product: {
+        rawProductId: string;
+        title: string;
+        adapterId: string;
+        failureReason: string;
+      }) => {
         expect(product).toHaveProperty('rawProductId');
         expect(product).toHaveProperty('title');
         expect(product).toHaveProperty('adapterId');
@@ -224,7 +234,7 @@ describe('Admin Operations Flow Integration', () => {
       expect(Array.isArray(payload.products)).toBe(true);
 
       // All products should be from requested adapter
-      payload.products.forEach((product: any) => {
+      payload.products.forEach((product: { adapterId: string }) => {
         expect(product.adapterId).toBe('retailer-a');
       });
     });
@@ -247,7 +257,7 @@ describe('Admin Operations Flow Integration', () => {
       const payload = response.json();
       expect(Array.isArray(payload.products)).toBe(true);
 
-      payload.products.forEach((product: any) => {
+      payload.products.forEach((product: { failureReason: string }) => {
         expect(product.failureReason).toBe('PARSE_FAILURE');
       });
     });
@@ -317,7 +327,12 @@ describe('Admin Operations Flow Integration', () => {
       expect(payload).toHaveProperty('crawlJobs');
       expect(Array.isArray(payload.crawlJobs)).toBe(true);
 
-      payload.crawlJobs.forEach((job: any) => {
+      payload.crawlJobs.forEach((job: {
+        jobId: string;
+        adapterId: string;
+        status: string;
+        triggeredByAdmin: string | null;
+      }) => {
         expect(job).toHaveProperty('jobId');
         expect(job).toHaveProperty('adapterId');
         expect(job).toHaveProperty('status');
@@ -377,7 +392,11 @@ describe('Admin Operations Flow Integration', () => {
        * When a request includes invalid or missing session
        * Then the system returns 401 Unauthorized
        */
-      const endpoints = [
+      const endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+        payload?: { adapterIds: string[] };
+      }> = [
         { method: 'GET', path: '/api/v1/admin/overview' },
         { method: 'GET', path: '/api/v1/admin/sources' },
         { method: 'GET', path: '/api/v1/admin/unmatched-products' },
@@ -386,9 +405,9 @@ describe('Admin Operations Flow Integration', () => {
 
       for (const endpoint of endpoints) {
         const response = await app.inject({
-          method: endpoint.method as any,
+          method: endpoint.method,
           url: endpoint.path,
-          payload: (endpoint as any).payload,
+          payload: endpoint.payload,
         });
 
         expect(response.statusCode).toBe(401);
@@ -447,7 +466,7 @@ describe('Admin Operations Flow Integration', () => {
       const overview = overviewResponse.json();
       const sources = sourcesResponse.json();
 
-      const staleCount = sources.sources.filter((s: any) => s.isStale).length;
+      const staleCount = sources.sources.filter((source: { isStale: boolean }) => source.isStale).length;
       expect(overview.staleSources).toBe(staleCount);
     });
   });

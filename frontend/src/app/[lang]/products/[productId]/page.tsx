@@ -40,7 +40,7 @@ export async function generateMetadata(props: ProductDetailPageProps) {
         images: product.images?.[0] ? [{ url: product.images[0] }] : [],
       },
     };
-  } catch (error) {
+  } catch {
     return {
       title: 'Product',
     };

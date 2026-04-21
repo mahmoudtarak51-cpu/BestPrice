@@ -161,7 +161,7 @@ describe('Admin Operations Contract', () => {
       expect(response.statusCode).toBe(200);
       const payload = response.json();
       expect(Array.isArray(payload.sources)).toBe(true);
-      payload.sources.forEach((source: any) => {
+      payload.sources.forEach((source: { isStale: boolean }) => {
         expect(source.isStale).toBe(true);
       });
     });

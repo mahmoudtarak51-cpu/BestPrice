@@ -1,7 +1,11 @@
-import type { SearchResponse } from '../../lib/types/search.js';
-import { ResultCard } from './result-card.js';
+import type { AppLocale } from '../../i18n/config';
+import type { SearchResponse } from '../../lib/types/search';
+import { ResultCard } from './result-card';
 
-export function SearchResults(props: { response: SearchResponse }) {
+export function SearchResults(props: {
+  locale: AppLocale;
+  response: SearchResponse;
+}) {
   if (props.response.totalResults === 0) {
     return (
       <section className="emptyState">
@@ -19,7 +23,7 @@ export function SearchResults(props: { response: SearchResponse }) {
       </div>
       <div className="resultsList">
         {props.response.groups.map((group) => (
-          <ResultCard group={group} key={group.productId} />
+          <ResultCard group={group} key={group.productId} locale={props.locale} />
         ))}
       </div>
     </section>

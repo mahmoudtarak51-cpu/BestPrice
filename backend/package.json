@@ -5,16 +5,20 @@
   "scripts": {
     "dev:api": "tsx watch src/api/server.ts",
     "dev:worker": "tsx watch src/jobs/worker.ts",
+    "serve:api": "tsx src/api/server.ts",
+    "serve:worker": "tsx src/jobs/worker.ts",
     "db:migrate": "tsx src/db/migrations/0001_init.ts",
     "db:seed:catalog": "tsx src/db/seeds/catalog.ts",
     "db:seed:admins": "tsx src/db/seeds/admins.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/api/server.js",
+    "start:worker": "node dist/jobs/worker.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:unit": "vitest run --passWithNoTests",
-    "test:integration": "vitest run --passWithNoTests --dir tests/integration",
-    "test:contract": "vitest run --passWithNoTests --dir tests/contract"
+    "test:integration": "vitest run --passWithNoTests tests/integration",
+    "test:contract": "vitest run --passWithNoTests tests/contract"
   },
   "dependencies": {
     "@fastify/cookie": "^10.0.1",

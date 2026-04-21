@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
+import nextPlugin from '@next/eslint-plugin-next';
 
 const ignores = [
   '**/node_modules/**',
@@ -48,6 +49,16 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
+    },
+  },
+  {
+    files: ['frontend/**/*.{js,jsx,ts,tsx,mjs,cjs}'],
+    plugins: {
+      '@next/next': nextPlugin,
+    },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
     },
   },
 ];

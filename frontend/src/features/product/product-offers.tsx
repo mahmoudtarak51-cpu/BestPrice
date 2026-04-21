@@ -10,7 +10,7 @@ interface ProductOffersProps {
   lang: 'ar' | 'en';
 }
 
-export function ProductOffers({ offers, productId, lang }: ProductOffersProps) {
+export function ProductOffers({ offers, productId: _productId, lang }: ProductOffersProps) {
   const [expandedOfferId, setExpandedOfferId] = useState<string | null>(null);
 
   if (offers.length === 0) {

@@ -1,4 +1,4 @@
-import type { SearchFilters, SearchResponse } from '../types/search.js';
+import type { SearchFilters, SearchResponse } from '../types/search';
 
 const fallbackResponse: SearchResponse = {
   query: 'iphone',
@@ -86,14 +86,13 @@ export async function fetchSearchResults(
   filters: SearchFilters,
 ): Promise<SearchResponse> {
   const params = buildQuery(filters);
-  const baseUrl = process.env.API_BASE_URL ?? 'http://localhost:3001/api/v1';
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL
+    ?? process.env.API_BASE_URL
+    ?? 'http://localhost:3001/api/v1';
 
   try {
-    const response = await fetch(`${baseUrl}/search?${params.toString()}`, {
-      next: {
-        revalidate: 60,
-      },
-    });
+    const response = await fetch(`${baseUrl}/search?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`Search request failed with status ${response.status}.`);

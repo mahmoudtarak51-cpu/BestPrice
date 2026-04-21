@@ -1,8 +1,8 @@
-import type { AppLocale } from '../../i18n/config.js';
-import { LOCALE_METADATA, UI_COPY } from '../../i18n/config.js';
-import type { SearchResponse } from '../../lib/types/search.js';
-import { SearchFilters } from './search-filters.js';
-import { SearchResults } from './search-results.js';
+import type { AppLocale } from '../../i18n/config';
+import { LOCALE_METADATA, UI_COPY } from '../../i18n/config';
+import type { SearchResponse } from '../../lib/types/search';
+import { SearchFilters } from './search-filters';
+import { SearchResults } from './search-results';
 
 export function SearchPage(props: {
   locale: AppLocale;
@@ -37,7 +37,7 @@ export function SearchPage(props: {
         </div>
       </section>
       <SearchFilters locale={props.locale} />
-      <SearchResults response={props.response} />
+      <SearchResults locale={props.locale} response={props.response} />
     </main>
   );
 }

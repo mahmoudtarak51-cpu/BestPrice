@@ -60,7 +60,7 @@ export const rejectProductRequestSchema = z.object({
     .max(500),
 });
 
-export const unm atchedProductsStatisticsSchema = z.object({
+export const unmatchedProductsStatisticsSchema = z.object({
   total: z.number().int().describe('Total unmatched products'),
   byAdapter: z.array(
     z.object({

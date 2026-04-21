@@ -1,23 +1,24 @@
 {
   "name": "bestprice",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@10.0.0+sha512.b8fef5494bd3fe4cbd4edabd0745df2ee5be3e4b0b8b08fa643aa3e4c6702ccc0f00d68fa8a8c9858a735a0032485a44990ed2810526c875e416f001b17df12b",
   "engines": {
     "node": ">=22.0.0",
     "pnpm": ">=10.0.0"
   },
   "scripts": {
-    "lint": "pnpm -r --if-present lint",
+    "lint": "corepack pnpm -r --if-present lint",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
-    "test:unit": "pnpm -r --if-present test:unit",
-    "test:e2e": "pnpm --filter frontend test:e2e",
-    "ci": "pnpm lint && pnpm typecheck && pnpm test"
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "corepack pnpm -r --if-present test",
+    "test:unit": "corepack pnpm -r --if-present test:unit",
+    "test:e2e": "corepack pnpm --filter frontend test:e2e",
+    "ci": "corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test"
   },
   "devDependencies": {
     "@eslint/js": "^9.16.0",
+    "@next/eslint-plugin-next": "15.0.4",
     "@types/node": "^22.10.2",
     "@typescript-eslint/eslint-plugin": "^8.18.2",
     "@typescript-eslint/parser": "^8.18.2",

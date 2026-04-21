@@ -35,3 +35,7 @@ to planning
 - Validation completed in one pass with no remaining clarification markers.
 - Git branch creation was blocked by sandbox permissions, but the feature
   directory and specification files were created successfully.
+- Quickstart smoke validation was attempted on April 17, 2026 during polish.
+  The first blockers were missing `pnpm` and missing `docker` on `PATH`, plus a
+  local Node version drift to `v24.14.0` instead of the documented Node 22 LTS
+  baseline.

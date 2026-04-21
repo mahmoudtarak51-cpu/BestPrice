@@ -42,7 +42,7 @@ const unmatchedProductDetailSchema = z.object({
   rawData: z.object({}).nullable(),
 });
 
-const manualMatchSchema = z.object({
+const _manualMatchSchema = z.object({
   canonicalProductId: z.string(),
 });
 
@@ -67,7 +67,7 @@ export async function registerAdminUnmatchedProductsRoutes(
       adapterId?: string;
       failureReason?: string;
     };
-    Reply: typeof unmatchedProductListSchema._type;
+    Reply: typeof unmatchedProductListSchema._type | { error: string };
   }>(
     '/api/v1/admin/unmatched-products',
     {
@@ -131,7 +131,15 @@ export async function registerAdminUnmatchedProductsRoutes(
 
       return reply.send(
         unmatchedProductListSchema.parse({
-          products: result.products.map(p => ({
+          products: result.products.map((p: {
+            rawProductId: string;
+            adapterId: string;
+            title: string;
+            price: number;
+            url: string;
+            crawledAt: Date;
+            failureReason: string | null;
+          }) => ({
             rawProductId: p.rawProductId,
             adapterId: p.adapterId,
             title: p.title,
@@ -156,7 +164,7 @@ export async function registerAdminUnmatchedProductsRoutes(
     Params: {
       rawProductId: string;
     };
-    Reply: typeof unmatchedProductDetailSchema._type;
+    Reply: typeof unmatchedProductDetailSchema._type | { error: string };
   }>(
     '/api/v1/admin/unmatched-products/:rawProductId',
     {
@@ -228,8 +236,8 @@ export async function registerAdminUnmatchedProductsRoutes(
     Params: {
       rawProductId: string;
     };
-    Body: typeof manualMatchSchema._type;
-    Reply: typeof manualMatchResponseSchema._type;
+    Body: typeof _manualMatchSchema._type;
+    Reply: typeof manualMatchResponseSchema._type | { error: string };
   }>(
     '/api/v1/admin/unmatched-products/:rawProductId/match',
     {
@@ -307,6 +315,7 @@ export async function registerAdminUnmatchedProductsRoutes(
     Body: {
       reason: string;
     };
+    Reply: { message: string } | { error: string };
   }>(
     '/api/v1/admin/unmatched-products/:rawProductId',
     {

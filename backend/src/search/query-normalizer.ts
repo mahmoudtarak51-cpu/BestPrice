@@ -6,36 +6,36 @@ const arabicLetterPattern = /[\u0600-\u06FF]/;
 const latinLetterPattern = /[A-Za-z]/;
 
 const arabicCharacterMap: Record<string, string> = {
-  آ: 'ا',
-  أ: 'ا',
-  إ: 'ا',
-  ى: 'ي',
-  ة: 'ه',
-  ؤ: 'و',
-  ئ: 'ي',
+  '\u0622': '\u0627',
+  '\u0623': '\u0627',
+  '\u0625': '\u0627',
+  '\u0649': '\u064A',
+  '\u0629': '\u0647',
+  '\u0624': '\u0648',
+  '\u0626': '\u064A',
 };
 
 const arabicIndicDigitsMap: Record<string, string> = {
-  '٠': '0',
-  '١': '1',
-  '٢': '2',
-  '٣': '3',
-  '٤': '4',
-  '٥': '5',
-  '٦': '6',
-  '٧': '7',
-  '٨': '8',
-  '٩': '9',
-  '۰': '0',
-  '۱': '1',
-  '۲': '2',
-  '۳': '3',
-  '۴': '4',
-  '۵': '5',
-  '۶': '6',
-  '۷': '7',
-  '۸': '8',
-  '۹': '9',
+  '\u0660': '0',
+  '\u0661': '1',
+  '\u0662': '2',
+  '\u0663': '3',
+  '\u0664': '4',
+  '\u0665': '5',
+  '\u0666': '6',
+  '\u0667': '7',
+  '\u0668': '8',
+  '\u0669': '9',
+  '\u06F0': '0',
+  '\u06F1': '1',
+  '\u06F2': '2',
+  '\u06F3': '3',
+  '\u06F4': '4',
+  '\u06F5': '5',
+  '\u06F6': '6',
+  '\u06F7': '7',
+  '\u06F8': '8',
+  '\u06F9': '9',
 };
 
 export type QueryLanguage = 'ar' | 'en' | 'mixed' | 'unknown';
@@ -80,7 +80,10 @@ export function normalizeArabicText(input: string): string {
     .map((character) => arabicIndicDigitsMap[character] ?? character)
     .join('');
 
-  return result.replace(latinPunctuation, ' ').replace(repeatedWhitespace, ' ').trim();
+  return result
+    .replace(latinPunctuation, ' ')
+    .replace(repeatedWhitespace, ' ')
+    .trim();
 }
 
 export function normalizeLatinText(input: string): string {

@@ -1,4 +1,3 @@
-import type { Database } from 'drizzle-orm';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('Alerts');
@@ -21,7 +20,7 @@ export interface Alert {
   adapterId?: string;
   createdAt: Date;
   resolvedAt?: Date;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -40,7 +39,7 @@ export class AlertService {
     type: string;
     message: string;
     adapterId?: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }): Alert {
     const alert: Alert = {
       id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -54,16 +53,16 @@ export class AlertService {
 
     this.alerts.set(alert.id, alert);
 
-    logger.info('Alert created', {
+    logger.info({
       alertId: alert.id,
       type: alert.type,
       severity: alert.severity,
       adapterId: alert.adapterId,
       message: alert.message,
-    });
+    }, 'Alert created');
 
     // Notify listeners
-    this.alertListeners.forEach(listener => listener(alert));
+    this.alertListeners.forEach((listener) => listener(alert));
 
     return alert;
   }
@@ -78,11 +77,11 @@ export class AlertService {
     alert.resolvedAt = new Date();
     this.alerts.set(alertId, alert);
 
-    logger.info('Alert resolved', {
+    logger.info({
       alertId,
       type: alert.type,
       durationMs: alert.resolvedAt.getTime() - alert.createdAt.getTime(),
-    });
+    }, 'Alert resolved');
 
     return alert;
   }

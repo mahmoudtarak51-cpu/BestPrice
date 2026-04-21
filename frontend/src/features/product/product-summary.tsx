@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import type { ProductDetail } from '@/lib/types/product';
 
 interface ProductSummaryProps {
@@ -15,9 +16,13 @@ export function ProductSummary({ product, lang }: ProductSummaryProps) {
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <div className="bg-gray-100 rounded-lg aspect-square flex items-center justify-center overflow-hidden">
           {product.images && product.images.length > 0 ? (
-            <img
+            <Image
               src={product.images[0]}
               alt={product.title}
+              width={800}
+              height={800}
+              unoptimized
+              sizes="(max-width: 768px) 100vw, 33vw"
               className="w-full h-full object-cover"
             />
           ) : (
@@ -39,7 +44,15 @@ export function ProductSummary({ product, lang }: ProductSummaryProps) {
                   // Image gallery functionality would go here
                 }}
               >
-                <img src={image} alt={`${product.title} ${index + 2}`} className="w-full h-full object-cover" />
+                <Image
+                  src={image}
+                  alt={`${product.title} ${index + 2}`}
+                  width={200}
+                  height={200}
+                  unoptimized
+                  sizes="(max-width: 768px) 25vw, 10vw"
+                  className="w-full h-full object-cover"
+                />
               </button>
             ))}
           </div>

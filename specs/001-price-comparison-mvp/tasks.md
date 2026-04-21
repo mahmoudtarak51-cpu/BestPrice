@@ -127,15 +127,12 @@ description: "Task list for implementing the Egypt Price Comparison MVP"
 
 ### Tests for User Story 3
 
-- [ ] T044 [P] [US3] Add OpenAPI contract coverage for admin overview, sources, crawl jobs, and unmatched products in `backend/tests/contract/admin-operations.contract.test.ts`
-- [ ] T045 [P] [US3] Add backend integration coverage for stale-source and failure visibility in `backend/tests/integration/admin-operations-flow.test.ts`
-- [ ] T046 [P] [US3] Add admin e2e coverage for sign-in and monitoring workflows in `frontend/tests/e2e/admin-operations.spec.ts`
-
-### Implementation for User Story 3
-
 - [X] T044 [P] [US3] Add OpenAPI contract coverage for admin overview, sources, crawl jobs, and unmatched products in `backend/tests/contract/admin-operations.contract.test.ts`
 - [X] T045 [P] [US3] Add backend integration coverage for stale-source and failure visibility in `backend/tests/integration/admin-operations-flow.test.ts`
 - [X] T046 [P] [US3] Add admin e2e coverage for sign-in and monitoring workflows in `frontend/tests/e2e/admin-operations.spec.ts`
+
+### Implementation for User Story 3
+
 - [X] T047 [P] [US3] Implement admin user repository and auth routes in `backend/src/auth/admin-user-repository.ts` and `backend/src/api/routes/admin-auth.ts`
 - [X] T048 [US3] Implement source health and unmatched-product services in `backend/src/api/services/source-health-service.ts` and `backend/src/api/services/unmatched-product-service.ts`
 - [X] T049 [US3] Implement admin overview and source health routes in `backend/src/api/routes/admin-overview.ts` and `backend/src/api/routes/admin-sources.ts`
@@ -154,12 +151,12 @@ description: "Task list for implementing the Egypt Price Comparison MVP"
 
 **Purpose**: Final hardening work that spans multiple user stories.
 
-- [ ] T056 [P] Document the delivered workspace and run commands in `README.md` and `specs/001-price-comparison-mvp/quickstart.md`
-- [ ] T057 Refine shared API types and remove duplication in `backend/src/lib/api-types.ts` and `frontend/src/lib/types/api.ts`
-- [ ] T058 [P] Add regression coverage for bilingual normalization and matching thresholds in `backend/tests/unit/query-normalizer.test.ts` and `backend/tests/unit/matching-service.test.ts`
-- [ ] T059 [P] Tune ranking audit dashboards and source-health metrics in `backend/src/support/ranking-audit.ts` and `backend/src/support/source-health-metrics.ts`
-- [ ] T060 Harden admin session security and secret validation in `backend/src/auth/session.ts` and `backend/src/support/config.ts`
-- [ ] T061 Run the quickstart smoke flow and record any fixes in `specs/001-price-comparison-mvp/quickstart.md` and `specs/001-price-comparison-mvp/checklists/requirements.md`
+- [X] T056 [P] Document the delivered workspace and run commands in `README.md` and `specs/001-price-comparison-mvp/quickstart.md`
+- [X] T057 Refine shared API types and remove duplication in `backend/src/lib/api-types.ts` and `frontend/src/lib/types/api.ts`
+- [X] T058 [P] Add regression coverage for bilingual normalization and matching thresholds in `backend/tests/unit/query-normalizer.test.ts` and `backend/tests/unit/matching-service.test.ts`
+- [X] T059 [P] Tune ranking audit dashboards and source-health metrics in `backend/src/support/ranking-audit.ts` and `backend/src/support/source-health-metrics.ts`
+- [X] T060 Harden admin session security and secret validation in `backend/src/auth/session.ts` and `backend/src/support/config.ts`
+- [X] T061 Run the quickstart smoke flow and record any fixes in `specs/001-price-comparison-mvp/quickstart.md` and `specs/001-price-comparison-mvp/checklists/requirements.md`
 
 ---
 

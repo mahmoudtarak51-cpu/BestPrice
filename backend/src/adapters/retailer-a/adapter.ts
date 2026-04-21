@@ -1,4 +1,8 @@
-import { BaseSourceAdapter, type FetchResult } from '../base/source-adapter.js';
+import {
+  BaseSourceAdapter,
+  type FetchResult,
+  type SourceAdapterRunContext,
+} from '../base/source-adapter.js';
 import { normalizeListing } from '../normalize/normalization-service.js';
 import { parseRetailerAListings } from './parser.js';
 
@@ -54,10 +58,10 @@ export class RetailerAAdapter extends BaseSourceAdapter {
   readonly key = 'retailer-a';
   readonly transport = 'json' as const;
 
-  fetch(): FetchResult<(typeof retailerARecords)[number]> {
+  fetch(runContext: SourceAdapterRunContext): FetchResult<(typeof retailerARecords)[number]> {
     return {
       runId: 'run-retailer-a',
-      fetchedAt: new Date('2026-04-17T09:40:00.000Z').toISOString(),
+      fetchedAt: runContext.scheduledAt.toISOString(),
       transport: this.transport,
       records: [...retailerARecords],
     };
@@ -68,10 +72,11 @@ export class RetailerAAdapter extends BaseSourceAdapter {
   }
 
   normalize(parsedListing: ReturnType<typeof parseRetailerAListings>[number]) {
+    const now = new Date();
     const fetchedAt =
       parsedListing.externalId === 'a-stale-tv'
-        ? '2026-04-16T19:00:00.000Z'
-        : '2026-04-17T09:40:00.000Z';
+        ? new Date(now.getTime() - 13 * 60 * 60 * 1000).toISOString()
+        : now.toISOString();
 
     return normalizeListing({
       parsedListing,

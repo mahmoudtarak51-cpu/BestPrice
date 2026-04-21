@@ -1,11 +1,7 @@
-import { Database } from '../db/client';
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
-import {
-  canonicalProductsTable,
-  offersTable,
-  priceHistoryTable,
-  matchingReviewsTable,
-} from '../db/schema';
+import type { Database } from '../client.js';
+import { and, eq } from 'drizzle-orm';
+import { canonicalProducts } from '../schema.js';
+import { OfferRepository } from './offer-repository.js';
 
 export interface CanonicalProductDetail {
   id: string;
@@ -77,11 +73,11 @@ export class CanonicalProductRepository {
       lang?: 'ar' | 'en';
     }
   ): Promise<ProductWithOffers | null> {
-    const product = await this.db
+    const productRows = await this.db
       .select()
-      .from(canonicalProductsTable)
-      .where(eq(canonicalProductsTable.id, productId))
-      .then((rows) => rows[0] || null);
+      .from(canonicalProducts)
+      .where(eq(canonicalProducts.id, productId));
+    const product = productRows[0] ?? null;
 
     if (!product) {
       return null;
@@ -101,16 +97,14 @@ export class CanonicalProductRepository {
 
     return {
       id: product.id,
-      title: product.title,
-      category: product.category,
-      brand: product.brand,
-      model: product.model || undefined,
+      title: product.canonicalNameEn,
+      category: product.categoryId,
+      brand: product.brandId,
+      model: product.modelNumber || undefined,
       gtin: product.gtin || undefined,
-      description: product.description || undefined,
-      images: product.images ? JSON.parse(product.images as string) : [],
-      specifications: product.specifications
-        ? JSON.parse(product.specifications as string)
-        : {},
+      description: undefined,
+      images: product.imageUrl ? [product.imageUrl] : [],
+      specifications: (product.specsJson as Record<string, string>) ?? {},
       createdAt: product.createdAt,
       updatedAt: product.updatedAt,
       exactOffers,
@@ -127,11 +121,11 @@ export class CanonicalProductRepository {
       includeStale?: boolean;
     }
   ): Promise<SimilarProductDetail[]> {
-    const mainProduct = await this.db
+    const mainProductRows = await this.db
       .select()
-      .from(canonicalProductsTable)
-      .where(eq(canonicalProductsTable.id, productId))
-      .then((rows) => rows[0]);
+      .from(canonicalProducts)
+      .where(eq(canonicalProducts.id, productId));
+    const mainProduct = mainProductRows[0];
 
     if (!mainProduct) {
       return [];
@@ -140,20 +134,20 @@ export class CanonicalProductRepository {
     // Find similar products based on brand and category
     const similarProducts = await this.db
       .select()
-      .from(canonicalProductsTable)
+      .from(canonicalProducts)
       .where(
         and(
-          eq(canonicalProductsTable.category, mainProduct.category),
-          eq(canonicalProductsTable.brand, mainProduct.brand)
+          eq(canonicalProducts.categoryId, mainProduct.categoryId),
+          eq(canonicalProducts.brandId, mainProduct.brandId)
         )
-      )
-      .then((rows) => rows.filter((r) => r.id !== productId));
+      );
+    const filteredSimilarProducts = similarProducts.filter((row) => row.id !== productId);
 
     // Enrich with offer information and match confidence
     const offerRepo = new OfferRepository(this.db);
     const result: SimilarProductDetail[] = [];
 
-    for (const similar of similarProducts) {
+    for (const similar of filteredSimilarProducts) {
       const offers = await offerRepo.getOffersForProduct(similar.id, {
         includeStale: options?.includeStale ?? false,
       });
@@ -163,10 +157,10 @@ export class CanonicalProductRepository {
 
       result.push({
         id: similar.id,
-        title: similar.title,
-        brand: similar.brand,
-        model: similar.model || undefined,
-        category: similar.category,
+        title: similar.canonicalNameEn,
+        brand: similar.brandId,
+        model: similar.modelNumber || undefined,
+        category: similar.categoryId,
         matchConfidence: confidence,
         matchReason: this.getMatchReason(mainProduct, similar),
         hasOffers: offers.length > 0,
@@ -180,18 +174,18 @@ export class CanonicalProductRepository {
    * Calculate match confidence between two products
    */
   private calculateMatchConfidence(
-    productA: (typeof canonicalProductsTable.$inferSelect),
-    productB: (typeof canonicalProductsTable.$inferSelect)
+    productA: (typeof canonicalProducts.$inferSelect),
+    productB: (typeof canonicalProducts.$inferSelect)
   ): number {
     let score = 0;
 
     // Same brand = high confidence
-    if (productA.brand === productB.brand) {
+    if (productA.brandId === productB.brandId) {
       score += 40;
     }
 
     // Same category = baseline
-    if (productA.category === productB.category) {
+    if (productA.categoryId === productB.categoryId) {
       score += 20;
     }
 
@@ -201,10 +195,10 @@ export class CanonicalProductRepository {
     }
 
     // Model number similarity (if available)
-    if (productA.model && productB.model) {
+    if (productA.modelNumber && productB.modelNumber) {
       const modelDistance = this.levenshteinDistance(
-        productA.model,
-        productB.model
+        productA.modelNumber,
+        productB.modelNumber
       );
       if (modelDistance <= 2) {
         score += 25;
@@ -213,8 +207,8 @@ export class CanonicalProductRepository {
 
     // Title similarity
     const titleDistance = this.levenshteinDistance(
-      productA.title,
-      productB.title
+      productA.canonicalNameEn,
+      productB.canonicalNameEn
     );
     if (titleDistance <= 5) {
       score += 15;
@@ -227,28 +221,32 @@ export class CanonicalProductRepository {
    * Get human-readable match reason
    */
   private getMatchReason(
-    productA: (typeof canonicalProductsTable.$inferSelect),
-    productB: (typeof canonicalProductsTable.$inferSelect)
+    productA: (typeof canonicalProducts.$inferSelect),
+    productB: (typeof canonicalProducts.$inferSelect)
   ): string {
     const reasons: string[] = [];
 
-    if (productA.brand === productB.brand) {
-      reasons.push(`Same brand: ${productA.brand}`);
+    if (productA.brandId === productB.brandId) {
+      reasons.push('Same brand');
     }
 
     if (productA.gtin && productA.gtin === productB.gtin) {
       reasons.push('Same GTIN');
     }
 
-    if (productA.model && productB.model && productA.model !== productB.model) {
+    if (
+      productA.modelNumber
+      && productB.modelNumber
+      && productA.modelNumber !== productB.modelNumber
+    ) {
       reasons.push(
-        `Similar model: ${productA.model} ≈ ${productB.model}`
+        `Similar model: ${productA.modelNumber} ≈ ${productB.modelNumber}`
       );
     }
 
     return reasons.length > 0
       ? reasons.join('; ')
-      : `Similar ${productA.category} product`;
+      : 'Similar product';
   }
 
   /**

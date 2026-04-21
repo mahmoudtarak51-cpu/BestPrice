@@ -14,8 +14,8 @@ interface OfferCardProps {
 
 export function OfferCard({
   offer,
-  isBestOverall = false,
-  isCheapest = false,
+  isBestOverall: _isBestOverall = false,
+  isCheapest: _isCheapest = false,
   isSelected = false,
   onExpandExplanation,
   lang,

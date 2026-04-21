@@ -1,6 +1,7 @@
+import type { FastifyBaseLogger } from 'fastify';
 import pino, { type Logger } from 'pino';
 
-export type AppLogger = Logger;
+export type AppLogger = FastifyBaseLogger;
 
 export function createLogger(
   service: string,
@@ -37,5 +38,5 @@ export function withBindings(
   logger: AppLogger,
   bindings: Record<string, string | number | boolean | undefined>,
 ): AppLogger {
-  return logger.child(bindings);
+  return (logger as Logger).child(bindings);
 }

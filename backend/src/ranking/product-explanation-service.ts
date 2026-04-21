@@ -1,5 +1,6 @@
-import { Database } from '../db/client';
-import { OfferRepository } from '../db/repositories/offer-repository';
+import type { Database } from '../db/client.js';
+import { OfferRepository } from '../db/repositories/offer-repository.js';
+import type { OfferDetail } from '../db/repositories/offer-repository.js';
 
 export interface RankingExplanation {
   offerId: string;
@@ -93,7 +94,7 @@ export class RankingExplanationService {
   /**
    * Calculate freshness status for an offer
    */
-  private calculateFreshnessStatus(offer: any): FreshnessStatus {
+  private calculateFreshnessStatus(offer: OfferDetail): FreshnessStatus {
     const hoursOld = offer.freshness.hoursOld;
     const isStale = hoursOld >= this.STALE_THRESHOLD_HOURS;
 
@@ -122,8 +123,8 @@ export class RankingExplanationService {
    * Calculate individual ranking factors
    */
   private calculateRankingFactors(
-    offer: any,
-    allOffers: any[],
+    offer: OfferDetail,
+    allOffers: OfferDetail[],
     freshnessStatus: FreshnessStatus
   ): RankingFactor[] {
     const factors: RankingFactor[] = [];
@@ -218,8 +219,8 @@ export class RankingExplanationService {
    */
   private determineRankingReason(
     rankingScore: number,
-    offer: any,
-    allOffers: any[],
+    offer: OfferDetail,
+    allOffers: OfferDetail[],
     freshnessStatus: FreshnessStatus
   ):
     | 'best_overall'
@@ -231,11 +232,11 @@ export class RankingExplanationService {
       return 'good_value';
     }
 
-    const cheapestOffer = allOffers.reduce((min, o) =>
-      o.price < min.price ? o : min
+    const cheapestOffer = allOffers.reduce((min, candidate) =>
+      candidate.price < min.price ? candidate : min
     );
-    const bestOffer = allOffers.reduce((best, o) =>
-      rankingScore > (best.rankingScore || 0) ? o : best
+    const bestOffer = allOffers.reduce((best, candidate) =>
+      this.simpleScore(candidate) > this.simpleScore(best) ? candidate : best
     );
 
     if (offer.id === bestOffer.id && rankingScore >= 80) {
@@ -256,7 +257,7 @@ export class RankingExplanationService {
   /**
    * Identify shipping-related issues
    */
-  private identifyShippingIssues(offer: any): string[] {
+  private identifyShippingIssues(offer: OfferDetail): string[] {
     const issues: string[] = [];
 
     if (!offer.shippingInfo || !offer.shippingInfo.available) {
@@ -324,5 +325,12 @@ export class RankingExplanationService {
     }
 
     return summaryMap;
+  }
+
+  private simpleScore(offer: OfferDetail): number {
+    const inStockBoost = offer.availability === 'in_stock' ? 40 : 0;
+    const freshnessBoost = Math.max(0, 12 - offer.freshness.hoursOld) * 2;
+    const pricePenalty = offer.price / 1000;
+    return inStockBoost + freshnessBoost - pricePenalty;
   }
 }

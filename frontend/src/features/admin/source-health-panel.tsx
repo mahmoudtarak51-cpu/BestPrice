@@ -94,6 +94,7 @@ export function SourceHealthPanel() {
         <h2 className="text-lg font-semibold text-gray-900">Source Health</h2>
         <label className="flex items-center gap-2 text-sm">
           <input
+            name="isStale"
             type="checkbox"
             checked={filterStale}
             onChange={e => setFilterStale(e.target.checked)}
@@ -125,6 +126,7 @@ export function SourceHealthPanel() {
                 <td className="px-4 py-3 font-medium text-gray-900">{source.name}</td>
                 <td className="px-4 py-3">
                   <span
+                    role="status"
                     className={`inline-block px-2 py-1 rounded text-xs font-semibold ${
                       source.isStale
                         ? 'bg-red-100 text-red-800'
@@ -171,6 +173,12 @@ interface CrawlStats {
   lastCrawlTime: string | null;
 }
 
+interface CrawlJobSummary {
+  status: string;
+  itemsProcessed?: number;
+  startedAt?: string | null;
+}
+
 export function CrawlSummaryCards() {
   const [stats, setStats] = useState<CrawlStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -188,15 +196,17 @@ export function CrawlSummaryCards() {
 
         if (!response.ok) throw new Error('Failed to fetch stats');
 
-        const data = await response.json();
-        const jobs = data.crawlJobs || [];
+        const data = (await response.json()) as {
+          crawlJobs?: CrawlJobSummary[];
+        };
+        const jobs = data.crawlJobs ?? [];
 
-        const successful = jobs.filter((j: any) => j.status === 'completed').length;
-        const failed = jobs.filter((j: any) => j.status === 'failed').length;
+        const successful = jobs.filter((job) => job.status === 'completed').length;
+        const failed = jobs.filter((job) => job.status === 'failed').length;
         const avgItems = jobs.length > 0
-          ? jobs.reduce((sum: number, j: any) => sum + (j.itemsProcessed || 0), 0) / jobs.length
+          ? jobs.reduce((sum, job) => sum + (job.itemsProcessed || 0), 0) / jobs.length
           : 0;
-        const lastCrawl = jobs.length > 0 ? jobs[0].startedAt : null;
+        const lastCrawl = jobs.length > 0 ? (jobs[0].startedAt ?? null) : null;
 
         setStats({
           totalCrawls: jobs.length,
@@ -224,7 +234,7 @@ export function CrawlSummaryCards() {
     : 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-crawl-status="available">
       {/* Total Crawls */}
       <div className="bg-blue-50 rounded-lg border border-blue-200 p-4">
         <p className="text-sm font-medium text-blue-600">Total Crawls</p>

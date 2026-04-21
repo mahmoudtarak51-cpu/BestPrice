@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { AdminUserRepository } from '../auth/admin-user-repository.js';
-import { createSession, verifySession } from '../auth/session.js';
-import { hashPassword } from '../auth/password.js';
+import type { AdminUserRepository } from '../../auth/admin-user-repository.js';
+import { hashPassword } from '../../auth/password.js';
+import { createSession, verifySession } from '../../auth/session.js';
+
+const MIN_PASSWORD_CHANGE_LENGTH = 8;
 
 /**
  * Admin authentication routes
@@ -11,9 +13,9 @@ import { hashPassword } from '../auth/password.js';
  * POST /api/v1/admin/auth/logout - Logout and invalidate session
  */
 
-const loginSchema = z.object({
+const _loginSchema = z.object({
   email: z.string().email('Invalid email'),
-  password: z.string().min(8, 'Password too short'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 const loginResponseSchema = z.object({
@@ -30,10 +32,6 @@ const statusResponseSchema = z.object({
   role: z.literal('admin'),
 });
 
-const errorResponseSchema = z.object({
-  error: z.string(),
-});
-
 export async function registerAdminAuthRoutes(
   app: FastifyInstance,
   adminUserRepository: AdminUserRepository,
@@ -43,7 +41,7 @@ export async function registerAdminAuthRoutes(
    * POST /api/v1/admin/auth/login
    * Authenticate admin and create session
    */
-  app.post<{ Body: typeof loginSchema._type }>(
+  app.post<{ Body: typeof _loginSchema._type }>(
     '/api/v1/admin/auth/login',
     {
       schema: {
@@ -54,7 +52,7 @@ export async function registerAdminAuthRoutes(
           required: ['email', 'password'],
           properties: {
             email: { type: 'string', format: 'email' },
-            password: { type: 'string', minLength: 8 },
+            password: { type: 'string', minLength: 1 },
           },
         },
         response: {
@@ -92,6 +90,8 @@ export async function registerAdminAuthRoutes(
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
+      await adminUserRepository.recordSuccessfulLogin(admin.id);
+
       // Create session token
       const sessionToken = await createSession(
         {
@@ -107,7 +107,7 @@ export async function registerAdminAuthRoutes(
           sessionToken,
           adminId: admin.id,
           email: admin.email,
-          displayName: admin.display_name,
+          displayName: admin.fullName,
         }),
       );
     },
@@ -117,7 +117,7 @@ export async function registerAdminAuthRoutes(
    * GET /api/v1/admin/auth/status
    * Check current session status
    */
-  app.get<{ Reply: typeof statusResponseSchema._type }>(
+  app.get<{ Reply: typeof statusResponseSchema._type | { error: string } }>(
     '/api/v1/admin/auth/status',
     {
       schema: {
@@ -167,7 +167,7 @@ export async function registerAdminAuthRoutes(
         statusResponseSchema.parse({
           adminId: admin.id,
           email: admin.email,
-          displayName: admin.display_name,
+          displayName: admin.fullName,
           role: 'admin' as const,
         }),
       );
@@ -178,7 +178,7 @@ export async function registerAdminAuthRoutes(
    * POST /api/v1/admin/auth/logout
    * Logout and invalidate session
    */
-  app.post(
+  app.post<{ Reply: { message: string } | { error: string } }>(
     '/api/v1/admin/auth/logout',
     {
       schema: {
@@ -226,7 +226,10 @@ export async function registerAdminAuthRoutes(
    * POST /api/v1/admin/auth/change-password
    * Change admin password
    */
-  app.post<{ Body: { oldPassword: string; newPassword: string } }>(
+  app.post<{
+    Body: { oldPassword: string; newPassword: string };
+    Reply: { message: string } | { error: string };
+  }>(
     '/api/v1/admin/auth/change-password',
     {
       schema: {
@@ -236,8 +239,8 @@ export async function registerAdminAuthRoutes(
           type: 'object',
           required: ['oldPassword', 'newPassword'],
           properties: {
-            oldPassword: { type: 'string', minLength: 8 },
-            newPassword: { type: 'string', minLength: 8 },
+            oldPassword: { type: 'string', minLength: 1 },
+            newPassword: { type: 'string', minLength: MIN_PASSWORD_CHANGE_LENGTH },
           },
         },
         response: {

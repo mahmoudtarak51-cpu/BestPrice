@@ -1,6 +1,11 @@
 import { createRetailerAAdapter } from '../adapters/retailer-a/adapter.js';
 import { createRetailerBAdapter } from '../adapters/retailer-b/adapter.js';
 import { createSourceRegistry, type SourceRegistry } from '../adapters/source-registry.js';
+import type {
+  SearchResponse,
+  SearchResultGroup,
+} from '../lib/api-types.js';
+import type { NormalizedCatalogListing } from '../adapters/normalize/normalized-listing.js';
 import { matchCatalogListings } from '../matching/matching-service.js';
 import { rankOffers } from '../ranking/ranking-service.js';
 import { normalizeQuery } from './query-normalizer.js';
@@ -28,40 +33,6 @@ export type SearchRequest = {
   maxPrice?: number;
   page?: number;
   pageSize?: number;
-};
-
-export type SearchOfferSummary = {
-  offerId: string;
-  store: string;
-  priceEgp: number;
-  shippingEgp: number | null;
-  landedPriceEgp: number | null;
-  availability: 'in_stock' | 'limited' | 'out_of_stock' | 'unknown';
-  lastUpdatedAt: string;
-};
-
-export type SearchResultGroup = {
-  productId: string;
-  canonicalName: string;
-  canonicalNameArabic: string | null;
-  category: string;
-  brand: string;
-  imageUrl: string | null;
-  badges: Array<'best_overall' | 'cheapest'>;
-  bestOverallOffer: SearchOfferSummary;
-  cheapestOffer: SearchOfferSummary | null;
-  exactOfferCount: number;
-  similarProductCount: number;
-  lastUpdatedAt: string;
-};
-
-export type SearchResponse = {
-  query: string;
-  detectedLanguage: 'ar' | 'en' | 'mixed' | 'unknown';
-  page: number;
-  pageSize: number;
-  totalResults: number;
-  groups: SearchResultGroup[];
 };
 
 type IndexedGroup = SearchResultGroup & {
@@ -102,7 +73,7 @@ export class SearchService {
 
   async refreshCatalog(): Promise<void> {
     const scheduledAt = this.#now();
-    const normalizedListings = [];
+    const normalizedListings: NormalizedCatalogListing[] = [];
 
     for (const adapter of this.#registry.list()) {
       const fetched = await adapter.fetch({
@@ -121,7 +92,15 @@ export class SearchService {
         });
 
         if (validation.accepted) {
-          normalizedListings.push(normalized);
+          const normalizedCatalog = normalized as Partial<NormalizedCatalogListing>;
+
+          normalizedListings.push({
+            ...normalized,
+            adapterKey: adapter.key,
+            storeId: normalizedCatalog.storeId ?? adapter.key,
+            storeName: normalizedCatalog.storeName ?? adapter.key,
+            trustScore: normalizedCatalog.trustScore ?? 50,
+          });
         }
       }
     }

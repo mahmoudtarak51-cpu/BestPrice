@@ -1,14 +1,15 @@
-import { resolveLocale } from '../../../i18n/config.js';
-import { fetchSearchResults } from '../../../lib/api/search-client.js';
-import type { SearchFilters } from '../../../lib/types/search.js';
-import { SearchPage } from '../../../features/search/search-page.js';
+import { resolveLocale } from '../../../i18n/config';
+import { fetchSearchResults } from '../../../lib/api/search-client';
+import type { SearchFilters } from '../../../lib/types/search';
+import { SearchPage } from '../../../features/search/search-page';
 
 export default async function LocalizedSearchPage(props: {
-  params: { lang: string };
-  searchParams?: Record<string, string | string[] | undefined>;
+  params: Promise<{ lang: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const locale = resolveLocale(props.params.lang);
-  const searchParams = props.searchParams ?? {};
+  const params = await props.params;
+  const locale = resolveLocale(params.lang);
+  const searchParams = (await props.searchParams) ?? {};
   const filters: SearchFilters = {
     q: getSingleValue(searchParams.q) ?? (locale === 'ar' ? 'سامسونج' : 'iphone'),
     lang: locale,

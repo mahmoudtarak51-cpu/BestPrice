@@ -1,8 +1,8 @@
 'use client';
 
-import type { AppLocale } from '../../i18n/config.js';
-import { UI_COPY } from '../../i18n/config.js';
-import { useSearchFilters } from './use-search-filters.js';
+import type { AppLocale } from '../../i18n/config';
+import { UI_COPY } from '../../i18n/config';
+import { useSearchFilters } from './use-search-filters';
 
 export function SearchFilters(props: { locale: AppLocale }) {
   const { searchParams, updateFilter } = useSearchFilters();

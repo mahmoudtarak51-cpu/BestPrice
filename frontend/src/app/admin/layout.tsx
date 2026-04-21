@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * Admin dashboard layout component
@@ -15,11 +16,18 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const isLoginRoute = pathname === '/admin/login';
 
   useEffect(() => {
+    if (isLoginRoute) {
+      setIsLoading(false);
+      return;
+    }
+
     // Verify admin session on mount
     const verifySession = async () => {
       try {
@@ -58,7 +66,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     };
 
     verifySession();
-  }, [router]);
+  }, [isLoginRoute, router]);
 
   const handleLogout = async () => {
     try {
@@ -77,6 +85,23 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       localStorage.removeItem('adminSessionToken');
       router.push('/admin/login');
     }
+  };
+
+  if (isLoginRoute) {
+    return <>{children}</>;
+  }
+
+  const navItemClass = (href: string) => {
+    const isActive =
+      pathname === href
+      || (href === '/admin/dashboard' && pathname === '/admin');
+
+    return [
+      'px-1 py-4 text-sm font-medium border-b-2 transition-colors',
+      isActive
+        ? 'text-gray-900 border-blue-500 hover:border-blue-600'
+        : 'text-gray-600 border-transparent hover:text-gray-900 hover:border-gray-300',
+    ].join(' ');
   };
 
   if (isLoading) {
@@ -119,30 +144,30 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8">
-            <a
+            <Link
               href="/admin/dashboard"
-              className="px-1 py-4 text-sm font-medium text-gray-900 border-b-2 border-blue-500 hover:border-blue-600"
+              className={navItemClass('/admin/dashboard')}
             >
               Dashboard
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/sources"
-              className="px-1 py-4 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-900 hover:border-gray-300"
+              className={navItemClass('/admin/sources')}
             >
               Source Health
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/crawl-jobs"
-              className="px-1 py-4 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-900 hover:border-gray-300"
+              className={navItemClass('/admin/crawl-jobs')}
             >
               Crawl History
-            </a>
-            <a
+            </Link>
+            <Link
               href="/admin/unmatched"
-              className="px-1 py-4 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-900 hover:border-gray-300"
+              className={navItemClass('/admin/unmatched')}
             >
               Unmatched Products
-            </a>
+            </Link>
           </div>
         </div>
       </nav>

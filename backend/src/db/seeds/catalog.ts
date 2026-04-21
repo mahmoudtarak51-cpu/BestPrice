@@ -84,7 +84,14 @@ export async function seedCatalog(databaseUrl = loadConfig().databaseUrl) {
       });
 
       if (!existing) {
-        await database.db.insert(brands).values(brand);
+        await database.db.insert(brands).values({
+          ...brand,
+          aliasesJson: {
+            ar: [...brand.aliasesJson.ar],
+            en: [...brand.aliasesJson.en],
+            transliterations: [...brand.aliasesJson.transliterations],
+          },
+        });
       }
     }
   } finally {

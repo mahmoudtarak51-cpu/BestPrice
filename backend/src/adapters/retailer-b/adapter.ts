@@ -1,4 +1,8 @@
-import { BaseSourceAdapter, type FetchResult } from '../base/source-adapter.js';
+import {
+  BaseSourceAdapter,
+  type FetchResult,
+  type SourceAdapterRunContext,
+} from '../base/source-adapter.js';
 import { normalizeListing } from '../normalize/normalization-service.js';
 import { parseRetailerBListings } from './parser.js';
 
@@ -39,10 +43,10 @@ export class RetailerBAdapter extends BaseSourceAdapter {
   readonly key = 'retailer-b';
   readonly transport = 'json' as const;
 
-  fetch(): FetchResult<(typeof retailerBRecords)[number]> {
+  fetch(runContext: SourceAdapterRunContext): FetchResult<(typeof retailerBRecords)[number]> {
     return {
       runId: 'run-retailer-b',
-      fetchedAt: new Date('2026-04-17T09:55:00.000Z').toISOString(),
+      fetchedAt: runContext.scheduledAt.toISOString(),
       transport: this.transport,
       records: [...retailerBRecords],
     };
@@ -59,7 +63,7 @@ export class RetailerBAdapter extends BaseSourceAdapter {
       storeId: 'store-retailer-b',
       storeName: 'Retailer B',
       trustScore: 91,
-      fetchedAt: '2026-04-17T09:55:00.000Z',
+      fetchedAt: new Date().toISOString(),
     });
   }
 }

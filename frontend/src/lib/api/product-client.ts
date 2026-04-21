@@ -1,11 +1,14 @@
-import {
+import type {
   ProductDetail,
   OffersList,
   SimilarProductsList,
   RankingExplanation,
-} from './types/product';
+} from '../types/product';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001/api/v1';
+const API_BASE_URL =
+  typeof window === 'undefined'
+    ? process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://127.0.0.1:3001/api/v1'
+    : '/api/v1';
 
 class ProductClient {
   /**

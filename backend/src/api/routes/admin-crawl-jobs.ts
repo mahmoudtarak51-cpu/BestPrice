@@ -1,17 +1,12 @@
+import type { Queue } from 'bullmq';
+import { and, count, desc, eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import type { Database } from 'drizzle-orm';
-import type { Queue } from 'bullmq';
-import { eq, desc } from 'drizzle-orm';
-import { crawlJobsTable } from '../../db/schema.js';
-import { verifyAdminSession } from '../middleware/admin-auth.js';
 
-/**
- * Admin crawl job routes
- * GET /api/v1/admin/crawl-jobs - List crawl job history
- * POST /api/v1/admin/crawl-jobs/manual - Trigger manual crawl
- * GET /api/v1/admin/crawl-jobs/:jobId - Get job details
- */
+import { sourceRegistry } from '../../adapters/source-registry.js';
+import type { Database } from '../../db/client.js';
+import { crawlJobs } from '../../db/schema.js';
+import { verifyAdminSession } from '../middleware/admin-auth.js';
 
 const crawlJobSchema = z.object({
   jobId: z.string(),
@@ -32,10 +27,6 @@ const crawlJobListSchema = z.object({
   limit: z.number(),
 });
 
-const manualCrawlSchema = z.object({
-  adapterIds: z.array(z.string()).min(1, 'At least one adapter must be selected'),
-});
-
 const manualCrawlResponseSchema = z.object({
   jobId: z.string(),
   adapterIds: z.array(z.string()),
@@ -43,16 +34,28 @@ const manualCrawlResponseSchema = z.object({
   message: z.string(),
 });
 
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  return 0;
+}
+
 export async function registerAdminCrawlJobsRoutes(
   app: FastifyInstance,
   database: Database,
   crawlQueue: Queue,
-  adminId: string,
 ) {
-  /**
-   * GET /api/v1/admin/crawl-jobs
-   * Get paginated crawl job history
-   */
   app.get<{
     Querystring: {
       page?: string;
@@ -64,96 +67,60 @@ export async function registerAdminCrawlJobsRoutes(
   }>(
     '/api/v1/admin/crawl-jobs',
     {
-      schema: {
-        description: 'Get crawl job history',
-        tags: ['Admin Operations'],
-        security: [{ bearerAuth: [] }],
-        querystring: {
-          type: 'object',
-          properties: {
-            page: { type: 'string' },
-            limit: { type: 'string' },
-            adapterId: { type: 'string' },
-            status: { type: 'string' },
-          },
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              crawlJobs: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    jobId: { type: 'string' },
-                    adapterId: { type: 'string' },
-                    status: { type: 'string' },
-                    startedAt: { type: 'string' },
-                    completedAt: { type: ['string', 'null'] },
-                    itemsProcessed: { type: 'number' },
-                    itemsFailed: { type: 'number' },
-                    itemsMatched: { type: 'number' },
-                    triggeredByAdmin: { type: ['string', 'null'] },
-                  },
-                },
-              },
-              total: { type: 'number' },
-              page: { type: 'number' },
-              limit: { type: 'number' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
       onRequest: verifyAdminSession,
     },
     async (request, reply) => {
-      const page = request.query.page ? parseInt(request.query.page, 10) : 1;
-      const limit = request.query.limit ? parseInt(request.query.limit, 10) : 20;
+      const page = request.query.page ? Number.parseInt(request.query.page, 10) : 1;
+      const limit = request.query.limit ? Number.parseInt(request.query.limit, 10) : 20;
       const offset = (page - 1) * limit;
 
-      let query = database
-        .select()
-        .from(crawlJobsTable)
-        .orderBy(desc(crawlJobsTable.started_at));
-
+      const predicates = [];
       if (request.query.adapterId) {
-        query = query.where(eq(crawlJobsTable.adapter_id, request.query.adapterId));
+        predicates.push(eq(crawlJobs.sourceAdapterId, request.query.adapterId));
       }
-
       if (request.query.status) {
-        query = query.where(eq(crawlJobsTable.status, request.query.status));
+        predicates.push(eq(crawlJobs.status, request.query.status as never));
       }
 
-      // Get total count
-      const countResult = await database.query.crawlJobsTable.findMany({
-        limit: Number.MAX_SAFE_INTEGER,
-      });
-      const total = countResult.length;
+      const whereClause = predicates.length ? and(...predicates) : undefined;
 
-      // Get paginated results
-      const jobs = await query.limit(limit).offset(offset);
+      const [{ total }] = await database
+        .select({ total: count() })
+        .from(crawlJobs)
+        .where(whereClause);
+
+      const jobs = await database
+        .select({
+          jobId: crawlJobs.id,
+          adapterId: crawlJobs.sourceAdapterId,
+          status: crawlJobs.status,
+          startedAt: crawlJobs.startedAt,
+          completedAt: crawlJobs.finishedAt,
+          itemsProcessed: crawlJobs.fetchedCount,
+          itemsFailed: crawlJobs.failedCount,
+          itemsMatched: crawlJobs.normalizedCount,
+          triggeredByAdmin: crawlJobs.triggeredByAdminId,
+        })
+        .from(crawlJobs)
+        .where(whereClause)
+        .orderBy(desc(crawlJobs.startedAt))
+        .limit(limit)
+        .offset(offset);
 
       return reply.send(
         crawlJobListSchema.parse({
-          crawlJobs: jobs.map(job => ({
-            jobId: job.id,
-            adapterId: job.adapter_id,
+          crawlJobs: jobs.map((job) => ({
+            jobId: job.jobId,
+            adapterId: job.adapterId,
             status: job.status,
-            startedAt: job.started_at.toISOString(),
-            completedAt: job.completed_at ? new Date(job.completed_at).toISOString() : null,
-            itemsProcessed: job.items_processed || 0,
-            itemsFailed: job.items_failed || 0,
-            itemsMatched: job.items_matched || 0,
-            triggeredByAdmin: job.triggered_by_admin_id,
+            startedAt: job.startedAt?.toISOString() ?? new Date(0).toISOString(),
+            completedAt: job.completedAt ? job.completedAt.toISOString() : null,
+            itemsProcessed: toNumber(job.itemsProcessed),
+            itemsFailed: toNumber(job.itemsFailed),
+            itemsMatched: toNumber(job.itemsMatched),
+            triggeredByAdmin: job.triggeredByAdmin,
           })),
-          total,
+          total: toNumber(total),
           page,
           limit,
         }),
@@ -161,205 +128,124 @@ export async function registerAdminCrawlJobsRoutes(
     },
   );
 
-  /**
-   * POST /api/v1/admin/crawl-jobs/manual
-   * Trigger a manual crawl for specified adapters
-   */
   app.post<{
-    Body: typeof manualCrawlSchema._type;
-    Reply: typeof manualCrawlResponseSchema._type;
+    Body: {
+      adapterIds: string[];
+    };
+    Reply: typeof manualCrawlResponseSchema._type | { error: string };
   }>(
     '/api/v1/admin/crawl-jobs/manual',
     {
-      schema: {
-        description: 'Trigger manual crawl for adapters',
-        tags: ['Admin Operations'],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: 'object',
-          properties: {
-            adapterIds: {
-              type: 'array',
-              items: { type: 'string' },
-              minItems: 1,
-            },
-          },
-          required: ['adapterIds'],
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              jobId: { type: 'string' },
-              adapterIds: { type: 'array', items: { type: 'string' } },
-              status: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          202: {
-            type: 'object',
-            properties: {
-              jobId: { type: 'string' },
-              adapterIds: { type: 'array', items: { type: 'string' } },
-              status: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
       onRequest: verifyAdminSession,
     },
     async (request, reply) => {
-      const { adapterIds } = request.body;
-
-      if (!adapterIds || adapterIds.length === 0) {
+      const adapterIds = request.body.adapterIds ?? [];
+      if (!adapterIds.length) {
         return reply.status(400).send({ error: 'At least one adapter must be specified' });
       }
 
-      // Get admin ID from session (would come from verified session)
-      const currentAdminId = (request as any).adminId || 'system';
+      const uniqueAdapterIds = [...new Set(adapterIds)];
+      const validAdapterIds = uniqueAdapterIds.filter((adapterId) => sourceRegistry.has(adapterId));
+      if (validAdapterIds.length === 0) {
+        return reply.status(404).send({ error: 'No valid adapters found' });
+      }
 
-      // Create crawl job entries in database
-      const jobId = `manual-crawl-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const adminUserId = request.adminSession?.adminUserId ?? null;
+      const createdJobIds: string[] = [];
 
-      try {
-        // For each adapter, create a job record and enqueue crawl
-        for (const adapterId of adapterIds) {
-          const job = await database
-            .insert(crawlJobsTable)
-            .values({
-              id: `${jobId}-${adapterId}`,
-              adapter_id: adapterId,
-              status: 'queued',
-              started_at: new Date(),
-              triggered_by_admin_id: currentAdminId,
-            })
-            .returning();
+      for (const adapterId of validAdapterIds) {
 
-          // Enqueue the crawl job
-          await crawlQueue.add(
-            'crawl',
-            {
-              adapterId,
-              jobId: job[0].id,
-              manual: true,
-              triggeredByAdminId: currentAdminId,
-            },
-            {
-              jobId: job[0].id,
-              attempts: 3,
-              backoff: {
-                type: 'exponential',
-                delay: 2000,
-              },
-            },
-          );
+        const inserted = await database
+          .insert(crawlJobs)
+          .values({
+            sourceAdapterId: adapterId,
+            triggeredByAdminId: adminUserId,
+            jobType: 'manual',
+            status: 'queued',
+            scheduledFor: new Date(),
+          })
+          .returning({ id: crawlJobs.id });
+
+        const insertedJobId = inserted[0]?.id;
+        if (!insertedJobId) {
+          continue;
         }
 
-        return reply.status(202).send(
-          manualCrawlResponseSchema.parse({
-            jobId,
-            adapterIds,
-            status: 'queued',
-            message: 'Crawl jobs have been enqueued',
-          }),
+        createdJobIds.push(insertedJobId);
+
+        await crawlQueue.add(
+          'crawl',
+          {
+            adapterId,
+            adapterKey: adapterId,
+            runType: 'manual',
+            triggeredByAdminId: adminUserId,
+          },
+          {
+            jobId: insertedJobId,
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 2000,
+            },
+          },
         );
-      } catch (error) {
-        app.log.error('Failed to enqueue manual crawl', error);
-        return reply.status(500).send({ error: 'Failed to enqueue crawl jobs' });
       }
+
+      return reply.status(202).send(
+        manualCrawlResponseSchema.parse({
+          jobId: createdJobIds[0] ?? `manual-${Date.now()}`,
+          adapterIds: validAdapterIds,
+          status: 'queued',
+          message: 'Crawl jobs have been enqueued',
+        }),
+      );
     },
   );
 
-  /**
-   * GET /api/v1/admin/crawl-jobs/:jobId
-   * Get details for a specific crawl job
-   */
   app.get<{
     Params: {
       jobId: string;
     };
-    Reply: typeof crawlJobSchema._type;
+    Reply: typeof crawlJobSchema._type | { error: string };
   }>(
     '/api/v1/admin/crawl-jobs/:jobId',
     {
-      schema: {
-        description: 'Get crawl job details',
-        tags: ['Admin Operations'],
-        security: [{ bearerAuth: [] }],
-        params: {
-          type: 'object',
-          properties: {
-            jobId: { type: 'string' },
-          },
-          required: ['jobId'],
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              jobId: { type: 'string' },
-              adapterId: { type: 'string' },
-              status: { type: 'string' },
-              startedAt: { type: 'string' },
-              completedAt: { type: ['string', 'null'] },
-              itemsProcessed: { type: 'number' },
-              itemsFailed: { type: 'number' },
-              itemsMatched: { type: 'number' },
-              triggeredByAdmin: { type: ['string', 'null'] },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-          404: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-            },
-          },
-        },
-      },
       onRequest: verifyAdminSession,
     },
     async (request, reply) => {
-      const jobs = await database
-        .select()
-        .from(crawlJobsTable)
-        .where(eq(crawlJobsTable.id, request.params.jobId));
+      const rows = await database
+        .select({
+          jobId: crawlJobs.id,
+          adapterId: crawlJobs.sourceAdapterId,
+          status: crawlJobs.status,
+          startedAt: crawlJobs.startedAt,
+          completedAt: crawlJobs.finishedAt,
+          itemsProcessed: crawlJobs.fetchedCount,
+          itemsFailed: crawlJobs.failedCount,
+          itemsMatched: crawlJobs.normalizedCount,
+          triggeredByAdmin: crawlJobs.triggeredByAdminId,
+        })
+        .from(crawlJobs)
+        .where(eq(crawlJobs.id, request.params.jobId))
+        .limit(1);
 
-      if (jobs.length === 0) {
+      if (!rows.length) {
         return reply.status(404).send({ error: 'Crawl job not found' });
       }
 
-      const job = jobs[0];
-
+      const job = rows[0];
       return reply.send(
         crawlJobSchema.parse({
-          jobId: job.id,
-          adapterId: job.adapter_id,
+          jobId: job.jobId,
+          adapterId: job.adapterId,
           status: job.status,
-          startedAt: job.started_at.toISOString(),
-          completedAt: job.completed_at ? new Date(job.completed_at).toISOString() : null,
-          itemsProcessed: job.items_processed || 0,
-          itemsFailed: job.items_failed || 0,
-          itemsMatched: job.items_matched || 0,
-          triggeredByAdmin: job.triggered_by_admin_id,
+          startedAt: job.startedAt?.toISOString() ?? new Date(0).toISOString(),
+          completedAt: job.completedAt ? job.completedAt.toISOString() : null,
+          itemsProcessed: toNumber(job.itemsProcessed),
+          itemsFailed: toNumber(job.itemsFailed),
+          itemsMatched: toNumber(job.itemsMatched),
+          triggeredByAdmin: job.triggeredByAdmin,
         }),
       );
     },

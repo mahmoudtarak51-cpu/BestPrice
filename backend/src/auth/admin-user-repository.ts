@@ -1,7 +1,7 @@
-import type { Database } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
-import { adminUsersTable } from '../db/schema.js';
-import { hashPassword, verifyPassword } from './password.js';
+import type { Database } from '../db/client.js';
+import { adminUsers } from '../db/schema.js';
+import { verifyPassword } from './password.js';
 
 /**
  * Repository for managing admin user persistence
@@ -17,14 +17,18 @@ export class AdminUserRepository {
     passwordHash: string;
     displayName?: string;
   }) {
+    const email = data.email.toLowerCase();
+
     const result = await this.database
-      .insert(adminUsersTable)
+      .insert(adminUsers)
       .values({
-        email: data.email,
-        password_hash: data.passwordHash,
-        display_name: data.displayName || data.email.split('@')[0],
+        email,
+        passwordHash: data.passwordHash,
+        fullName: data.displayName || email.split('@')[0],
         role: 'admin' as const,
-        created_at: new Date(),
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
       .returning();
 
@@ -37,8 +41,8 @@ export class AdminUserRepository {
   async findByEmail(email: string) {
     const result = await this.database
       .select()
-      .from(adminUsersTable)
-      .where(eq(adminUsersTable.email, email));
+      .from(adminUsers)
+      .where(eq(adminUsers.email, email.toLowerCase()));
 
     return result[0] || null;
   }
@@ -49,8 +53,8 @@ export class AdminUserRepository {
   async findById(adminId: string) {
     const result = await this.database
       .select()
-      .from(adminUsersTable)
-      .where(eq(adminUsersTable.id, adminId));
+      .from(adminUsers)
+      .where(eq(adminUsers.id, adminId));
 
     return result[0] || null;
   }
@@ -61,8 +65,8 @@ export class AdminUserRepository {
   async findAll() {
     const result = await this.database
       .select()
-      .from(adminUsersTable)
-      .orderBy(adminUsersTable.created_at);
+      .from(adminUsers)
+      .orderBy(adminUsers.createdAt);
 
     return result;
   }
@@ -74,12 +78,12 @@ export class AdminUserRepository {
     displayName?: string;
   }) {
     const result = await this.database
-      .update(adminUsersTable)
+      .update(adminUsers)
       .set({
-        display_name: data.displayName,
-        updated_at: new Date(),
+        fullName: data.displayName,
+        updatedAt: new Date(),
       })
-      .where(eq(adminUsersTable.id, adminId))
+      .where(eq(adminUsers.id, adminId))
       .returning();
 
     return result[0] || null;
@@ -90,12 +94,28 @@ export class AdminUserRepository {
    */
   async updatePassword(adminId: string, newPasswordHash: string) {
     const result = await this.database
-      .update(adminUsersTable)
+      .update(adminUsers)
       .set({
-        password_hash: newPasswordHash,
-        updated_at: new Date(),
+        passwordHash: newPasswordHash,
+        updatedAt: new Date(),
       })
-      .where(eq(adminUsersTable.id, adminId))
+      .where(eq(adminUsers.id, adminId))
+      .returning();
+
+    return result[0] || null;
+  }
+
+  /**
+   * Record a successful admin sign-in.
+   */
+  async recordSuccessfulLogin(adminId: string) {
+    const result = await this.database
+      .update(adminUsers)
+      .set({
+        lastLoginAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(adminUsers.id, adminId))
       .returning();
 
     return result[0] || null;
@@ -106,13 +126,13 @@ export class AdminUserRepository {
    */
   async verifyCredentials(email: string, password: string) {
     const admin = await this.findByEmail(email);
-    
-    if (!admin) {
+
+    if (!admin || admin.status !== 'active') {
       return null;
     }
 
-    const isValid = await verifyPassword(password, admin.password_hash);
-    
+    const isValid = verifyPassword(password, admin.passwordHash);
+
     if (!isValid) {
       return null;
     }
