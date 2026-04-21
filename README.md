@@ -76,16 +76,16 @@ Render deployment flow:
 3. Set a secure value for `ADMIN_SEED_PASSWORD` when Render prompts for unsynced
   environment variables. `SESSION_SECRET` is generated automatically by the
   Blueprint.
-4. After the first deploy succeeds, open a Render shell for the backend service
+4. The API service runs `db:migrate` automatically as a Render pre-deploy step.
+5. After the first deploy succeeds, open a Render shell for the backend service
   and run:
 
   ```bash
-  corepack pnpm --filter backend db:migrate
   corepack pnpm --filter backend db:seed:catalog
   corepack pnpm --filter backend db:seed:admins
   ```
 
-5. Redeploy `bestprice-api` and `bestprice-worker` if needed after the seed
+6. Redeploy `bestprice-api` and `bestprice-worker` if needed after the seed
   step.
 
 The frontend service expects the default Render hostname for the backend:

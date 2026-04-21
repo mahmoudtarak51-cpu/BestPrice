@@ -16,6 +16,7 @@ services:
     plan: starter
     rootDir: .
     buildCommand: corepack enable && corepack pnpm install --frozen-lockfile
+    preDeployCommand: corepack pnpm --filter backend db:migrate
     startCommand: corepack pnpm --filter backend serve:api
     healthCheckPath: /api/v1/health/live
     envVars:
