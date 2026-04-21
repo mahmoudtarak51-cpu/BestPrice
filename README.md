@@ -73,8 +73,9 @@ Render deployment flow:
 
 1. Push the repository to GitHub.
 2. In Render, create a new Blueprint instance from the repo root.
-3. Set secure values for `SESSION_SECRET` and `ADMIN_SEED_PASSWORD` when Render
-  prompts for unsynced environment variables.
+3. Set a secure value for `ADMIN_SEED_PASSWORD` when Render prompts for unsynced
+  environment variables. `SESSION_SECRET` is generated automatically by the
+  Blueprint.
 4. After the first deploy succeeds, open a Render shell for the backend service
   and run:
 

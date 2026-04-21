@@ -31,7 +31,7 @@ services:
           name: bestprice-redis
           property: connectionString
       - key: SESSION_SECRET
-        sync: false
+        generateValue: true
       - key: ADMIN_SEED_EMAIL
         value: admin@example.com
       - key: ADMIN_SEED_PASSWORD
@@ -61,7 +61,7 @@ services:
           name: bestprice-redis
           property: connectionString
       - key: SESSION_SECRET
-        sync: false
+        generateValue: true
       - key: ADMIN_SEED_EMAIL
         value: admin@example.com
       - key: ADMIN_SEED_PASSWORD
