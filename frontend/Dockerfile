@@ -9,10 +9,9 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json frontend/package.json
+COPY frontend frontend
 
 RUN corepack pnpm install --frozen-lockfile --filter frontend...
-
-COPY frontend frontend
 
 RUN corepack pnpm --filter frontend build
 
