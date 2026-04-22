@@ -8,6 +8,7 @@ services:
   - type: redis
     name: bestprice-redis
     plan: starter
+    ipAllowList: []
     maxmemoryPolicy: noeviction
 
   - type: web
