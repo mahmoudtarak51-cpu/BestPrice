@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bestprice}
+      POSTGRES_USER: ${POSTGRES_USER:-bestprice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in deploy/oracle/.env.vm}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bestprice} -d ${POSTGRES_DB:-bestprice}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - deploy/oracle/.env.api
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://${POSTGRES_USER:-bestprice}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bestprice}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - deploy/oracle/.env.api
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-bestprice}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bestprice}
+      REDIS_URL: redis://redis:6379
+    command: ["corepack", "pnpm", "--filter", "backend", "serve:worker"]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+    env_file:
+      - deploy/oracle/.env.frontend
+    environment:
+      NODE_ENV: production
+      API_BASE_URL: http://api:3001/api/v1
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  redis-data:

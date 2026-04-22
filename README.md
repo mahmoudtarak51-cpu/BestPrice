@@ -93,6 +93,63 @@ The frontend service expects the default Render hostname for the backend:
 attach a custom domain, update `API_BASE_URL` and `NEXT_PUBLIC_APP_URL` in the
 frontend service settings.
 
+### Oracle Cloud VM (Always Free)
+
+If Render requires payment for your plan, you can run the full stack on a
+single Oracle Cloud Ubuntu VM using Docker Compose.
+
+Included files:
+
+- `docker-compose.oracle.yml`
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `deploy/oracle/install-docker.sh`
+- `deploy/oracle/deploy.sh`
+- `deploy/oracle/.env.vm.example`
+- `deploy/oracle/.env.api.example`
+- `deploy/oracle/.env.frontend.example`
+
+Setup flow on the VM:
+
+1. Clone this repository.
+2. Install Docker:
+
+  ```bash
+  bash deploy/oracle/install-docker.sh
+  ```
+
+3. Reconnect your SSH session, then prepare env files:
+
+  ```bash
+  cp deploy/oracle/.env.vm.example deploy/oracle/.env.vm
+  cp deploy/oracle/.env.api.example deploy/oracle/.env.api
+  cp deploy/oracle/.env.frontend.example deploy/oracle/.env.frontend
+  ```
+
+4. Edit those files with strong production secrets and your VM public IP.
+5. Deploy the stack:
+
+  ```bash
+  bash deploy/oracle/deploy.sh
+  ```
+
+6. Run database migration and seed once:
+
+  ```bash
+  docker compose --env-file deploy/oracle/.env.vm -f docker-compose.oracle.yml exec api corepack pnpm --filter backend db:migrate
+  docker compose --env-file deploy/oracle/.env.vm -f docker-compose.oracle.yml exec api corepack pnpm --filter backend db:seed:catalog
+  docker compose --env-file deploy/oracle/.env.vm -f docker-compose.oracle.yml exec api corepack pnpm --filter backend db:seed:admins
+  ```
+
+7. Open VM firewall/security list ports:
+  - `3000` for frontend
+  - `3001` for API
+
+Checks:
+
+- Frontend: `http://<vm-public-ip>:3000`
+- API health: `http://<vm-public-ip>:3001/api/v1/health/live`
+
 ## Environment
 
 Backend variables live in `backend/.env.example`. Frontend variables live in
